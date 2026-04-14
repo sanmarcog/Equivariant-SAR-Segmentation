@@ -41,19 +41,33 @@ Sub-questions:
 
 ## Q4: Is multi-temporal pre-event stacking feasible for this dataset?
 
-**Hypothesis**: median of 3–5 pre-event Sentinel-1 acquisitions as reference image lowers
-the noise floor and improves D2 sensitivity compared to single pre-event image.
+**CLOSED — 2026-04-14. Decision: DO NOT implement.**
 
-Feasibility questions:
-- Are additional pre-event Sentinel-1 scenes available for all 5 training regions (Livigno,
-  Nuuk, Pish) within a reasonable temporal window (e.g., 30–60 days before each event)?
-- Is the geometric co-registration quality sufficient for pixel-level stacking at 10m GRD?
-- Does the snow surface change significantly between acquisitions, invalidating a stable
-  reference assumption? (Especially relevant for Nuuk and Tromsø.)
-- What is the download and storage cost (each S1 GRD scene ~1 GB)?
+**Toy experiment result** (`scripts/stacking_toy_experiment.py`, Tromsø scene):
 
-**Decision gate**: answer these before committing to implementation. If available scenes
-exist and co-registration is feasible, this is the highest-impact preprocessing improvement.
+| D-scale | n  | Single (dB) | Stack 2-scene (dB) | Δ (dB) |
+|---------|----|-------------|-------------------|--------|
+| D1      | 4  | +1.42       | +1.33             | −0.10  |
+| D2      | 25 | +4.47       | +4.50             | +0.03  |
+| D3      | 71 | +5.15       | +4.65             | −0.50  |
+| D4      | 16 | +6.69       | +5.75             | −0.94  |
+
+Polygon contrast (mean signal − background, dB). Higher = cleaner detection.
+
+**Findings**:
+- Stack has 2.6× higher global std (4.80 dB) vs single (1.85 dB) — the stack change image is
+  dominated by large-scale structured variability, not reduced noise.
+- Visually: single shows clean, spatially localized red spots at deposit locations; stack shows
+  broad terrain-following patterns that completely mask the deposit signal.
+- Root cause: in winter Arctic terrain, snowpack backscatter changes systematically between
+  acquisitions (Nov 21 + Dec 3 vs the actual AvalCD pre-event). A median of 2 scenes
+  from 2–4 weeks earlier does NOT represent the actual surface state before the event.
+- With only 2 valid descending scenes available (Dec 8 zip was corrupt), median = mean,
+  providing no robustness against temporal outliers.
+
+**Conclusion**: The AvalCD single pre-event image (close in time, same orbit, calibrated
+to the same processing baseline) is substantially better than a multi-temporal stack.
+Multi-temporal stacking is not worth implementing for Phase 2. Close Q4.
 
 ---
 

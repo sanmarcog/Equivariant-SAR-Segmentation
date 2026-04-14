@@ -98,13 +98,15 @@ L = L_seg + λ_area × L_area
 > channel count increases from 5 (post-only) / 7 (bi-temporal) to a larger set.
 > Settle the full channel list before writing the dataset loader.
 
-## Feasibility investigations (not yet committed)
+## Feasibility investigations
 
-- **Multi-temporal pre-event stacking**: median of 3–5 pre-event Sentinel-1 acquisitions as
-  reference instead of single pre-event image. Would significantly lower the noise floor and
-  improve D2 sensitivity. Requires downloading additional scenes beyond AvalCD. 
-  See [open_questions.md](open_questions.md) Q4.
+- **Multi-temporal pre-event stacking**: ✗ REJECTED (2026-04-14).
+  Toy experiment showed 2-scene median stack has 2.6× higher std and lower polygon contrast
+  than the AvalCD single pre-event at all D-scales. Root cause: systematic snowpack
+  backscatter change between Nov/Dec acquisitions and actual event date overwhelms any
+  speckle reduction benefit. Single pre-event from AvalCD (calibrated, close in time) is
+  better. See [open_questions.md](open_questions.md) Q4 for full results.
 
-- **NL-SAR despeckling**: non-local SAR filter, better edge preservation than Refined Lee,
-  state of the art for small-object detection in SAR. Adds implementation complexity.
+- **NL-SAR despeckling**: not pursued. No maintained Python implementation; GRD already
+  multi-looked; marginal gain over Refined Lee at 10m resolution.
   See [open_questions.md](open_questions.md) Q5.
