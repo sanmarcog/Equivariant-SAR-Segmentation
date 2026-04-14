@@ -39,7 +39,7 @@ Area head (supplementary):
     soft_mask = sigmoid(logit)  [B, 1, 64, 64]
     area_m2   = soft_mask.sum(dim=[2,3]) × (10.0)²   pixel = 10m × 10m
 
-Parameter count: ~500–600K  (4× fewer than Gatti's 2.39M SwinV2-Tiny).
+Parameter count: ~625K  (verified; ~4× fewer than Gatti's 2.39M SwinV2-Tiny).
 
 Input channel split (from CHANNEL_NAMES in preprocess.py):
     Post 6ch: indices 0-5  (VH_post, VV_post, slope, sin_asp, cos_asp, LIA)

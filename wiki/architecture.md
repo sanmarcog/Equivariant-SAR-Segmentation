@@ -6,8 +6,36 @@
 
 ## Backbone: D4BiTemporalCNN
 
-- Shared-weight D4-equivariant encoder applied to post and pre patches separately
-- Change feature: `GroupPooling(feat_post − feat_pre)` → global avg pool → [B, 256]
+**Input split** (from the 12-channel scene array):
+- Post branch (6ch): VH_post, VV_post, slope, sin(aspect), cos(aspect), LIA — indices 0–5
+- Pre  branch (6ch): VH_pre, VV_pre, slope, sin(aspect), cos(aspect), LIA — indices [6,7,2,3,4,5]
+- Extra channels (4ch): log_ratio_VH, log_ratio_VV, xpol_post, xpol_pre — indices 8–11
+
+The extra 4 channels are not passed through the shared equivariant encoder (which requires identical input structure for both branches). They are injected directly into the decoder — see below.
+
+**Encoder**: 5 blocks, shared weights, D4-equivariant, n_reg = [8, 16, 32, 32, 32]:
+```
+Block 1 (no pool): trivial_6 → reg×8   [B, n1·8, 64, 64]
+Block 2 (pool×2):  reg×8  → reg×16  [B, n2·8, 32, 32]
+Block 3 (pool×2):  reg×16 → reg×32  [B, n3·8, 16, 16]
+Block 4 (pool×2):  reg×32 → reg×32  [B, n4·8,  8,  8]
+Block 5 (pool×2):  reg×32 → reg×32  [B, n5·8,  4,  4]
+```
+
+**Change feature — multi-scale GroupPooling (intentional extension for segmentation)**:
+
+The Phase 1 spec said `GroupPooling → global avg pool → [B, 256]` for the classification head. For a segmentation decoder this is insufficient — we need spatially-resolved change maps at each scale to localise deposit boundaries. So GroupPooling is applied at all 5 encoder scales, not just the bottleneck:
+
+```
+diff_i   = feat_post_i.tensor − feat_pre_i.tensor   (equivariant: g·diff = g·post − g·pre)
+skip_i   = GroupPooling(diff_i).tensor               [B, n_i, H_i, W_i]  (invariant)
+bottleneck = skip_5                                  [B, 32, 4, 4]
+```
+
+This gives the decoder multi-scale change evidence that varies across the 64×64 patch, which is critical for D2 boundary localisation. Global avg pool is NOT applied — spatial dims are preserved.
+
+Dropout(0.3) applied to the bottleneck `[B, 32, 4, 4]` before decoding.
+
 - Retrained from scratch with 12-channel input — Phase 1 checkpoint not reused
 
 > Note: Gatti et al. 2026 use SwinV2-Tiny (vision transformer) with ~2.39M params and 8 input channels (no log-ratio or cross-pol ratio). Our comparison is **equivariant CNN vs vision transformer**, not equivariant vs standard CNN. Our 12-channel input adds 4 engineered features they don't use.
@@ -16,19 +44,36 @@
 
 ## Segmentation decoder
 
-4-stage equivariant upsampling with U-Net skip connections from encoder:
+4-stage U-Net decoder (standard Conv2d, invariant features). At each stage, the grouped change skip `skip_i` and the 4 extra channels (avg-pooled to the stage's spatial size) are concatenated before the refinement conv.
 
 ```
-Encoder features [B, 256, 4, 4]
-  → R2Conv (128ch) + BN + ELU + ConvTranspose2d ×2  → [B, 128, 8, 8]  ← skip from enc stage 4
-  → R2Conv (64ch)  + BN + ELU + ConvTranspose2d ×2  → [B, 64, 16, 16] ← skip from enc stage 3
-  → R2Conv (32ch)  + BN + ELU + ConvTranspose2d ×2  → [B, 32, 32, 32] ← skip from enc stage 2
-  → R2Conv (16ch)  + BN + ELU + ConvTranspose2d ×2  → [B, 16, 64, 64] ← skip from enc stage 1
-  → Conv2d 1×1 (trivial repr → scalar)              → [B, 1, 64, 64]  (logit mask)
+Bottleneck: [B, 32, 4, 4]  (n5 change channels + dropout)
+
+Stage 1:  cat([bot,   e_4 ])       → Conv2d(32+4→128) + BN + ELU  → [B, 128, 4, 4]
+          ConvTranspose2d×2         →                                  [B, 128, 8, 8]
+          cat([x, skip4, e_8 ])    → Conv2d(128+32+4→128) + BN + ELU → [B, 128, 8, 8]
+
+Stage 2:  cat([x,   e_8 ])        → Conv2d(128+4→64) + BN + ELU   → [B,  64, 8, 8]
+          ConvTranspose2d×2         →                                  [B,  64,16,16]
+          cat([x, skip3, e_16])   → Conv2d(64+32+4→64)  + BN + ELU → [B,  64,16,16]
+
+Stage 3:  cat([x,   e_16])        → Conv2d(64+4→32)  + BN + ELU   → [B,  32,16,16]
+          ConvTranspose2d×2         →                                  [B,  32,32,32]
+          cat([x, skip2, e_32])   → Conv2d(32+16+4→32) + BN + ELU  → [B,  32,32,32]
+
+Stage 4:  cat([x,   e_32])        → Conv2d(32+4→16)  + BN + ELU   → [B,  16,32,32]
+          ConvTranspose2d×2         →                                  [B,  16,64,64]
+          cat([x, skip1, e_64])   → Conv2d(16+8+4→16)  + BN + ELU  → [B,  16,64,64]
+
+Final:    Conv2d(16→1, k=1)       →                                  [B,   1,64,64]  logit
 ```
+
+where `e_sz = AdaptiveAvgPool(extra_4ch, sz×sz)`.
+
+**Why inject the 4 extra channels at every decoder stage?** The log-ratio and cross-pol channels are explicit change signals. Feeding them at each decoder scale gives the network direct access to the change evidence at every resolution — the equivariant encoder's implicit difference is supplemented by the explicit engineered features, particularly important at the finest (64×64) scale for small deposit outlines.
 
 Skip connections preserve fine-scale spatial detail for small (D2) deposit boundaries.
-Parameter count: ~500–600K (up from ~391K; still ~4× fewer than Gatti et al.'s 2.39M).
+Parameter count: **~625K** (verified; ~4× fewer than Gatti et al.'s 2.39M).
 
 ---
 
@@ -68,7 +113,7 @@ the same region only (Livigno→Livigno, Nuuk→Nuuk, Pish→Pish — no cross-r
 Apply Gaussian edge blending at paste boundary. Cap at 20–30% of positive patches per batch.
 Monitor val precision as early warning for artifact learning.
 
-**Dropout**: 0.3 on the bottleneck ([B, 256, 4, 4]) — carried over from Phase 1.
+**Dropout**: 0.3 on the bottleneck ([B, 32, 4, 4]).
 
 **Regularization**: weight decay 1e-4 (L2).
 
