@@ -400,8 +400,21 @@ def train(
         import wandb
         wandb.finish()
 
-    log.info("Training complete. Best val AUPRC=%.4f", best_auprc)
-    return {"best_auprc": best_auprc, "ckpt": str(best_ckpt)}
+    # Load best val metrics from checkpoint to get F2 (for grid search ranking)
+    best_val_metrics: dict = {}
+    if best_ckpt.exists():
+        ckpt = torch.load(best_ckpt, map_location="cpu", weights_only=False)
+        best_val_metrics = ckpt.get("val_metrics", {})
+
+    log.info(
+        "Training complete. Best val AUPRC=%.4f  F2=%.4f",
+        best_auprc, best_val_metrics.get("best_f2", float("nan")),
+    )
+    return {
+        "best_auprc": best_auprc,
+        "best_f2":    best_val_metrics.get("best_f2", float("nan")),
+        "ckpt":       str(best_ckpt),
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -445,11 +458,13 @@ def grid_search(
         except Exception as e:
             log.error("Grid run %s failed: %s", key, e)
 
-    results.sort(key=lambda r: -r["best_auprc"])
+    # Rank by best val pixel F2 — grid search asks "which hparams give the best result?"
+    # (AUPRC is used for early stopping/checkpointing within each run, not for selection)
+    results.sort(key=lambda r: -r.get("best_f2", 0.0))
     grid_path = out_dir / "grid_results.json"
     with open(grid_path, "w") as f:
         json.dump(results, f, indent=2)
-    log.info("Grid search complete. Best: %s  (AUPRC=%.4f)", results[0]["key"], results[0]["best_auprc"])
+    log.info("Grid search complete. Best: %s  (F2=%.4f)", results[0]["key"], results[0].get("best_f2", float("nan")))
     log.info("Results saved → %s", grid_path)
 
 
