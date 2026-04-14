@@ -96,8 +96,15 @@ Run in this order; each condition uses 3 seeds:
 | 4 | + U-Net skip connections | Isolate architecture effect |
 | 5 | + copy-paste augmentation | Full system |
 
-Report pixel-level F1/F2 (primary) and polygon-level F1/F2 (supplementary) overall and per D-scale for each condition.
-Conditions 1–5 are the paper's ablation table.
+Report two ablation tables from the same runs (no extra compute):
+
+**Table A — Overall**: pixel-level F1/F2 (primary) and polygon-level F1/F2 (supplementary) across all D-scales. Standard ablation presentation.
+
+**Table B — D2-only**: pixel-level F2 for D2-class polygons only (n=25), with bootstrap 95% CIs. Directly answers "which technique actually helped small deposit detection?" If biased sampling and skip connections help D2 but copy-paste doesn't, that's a useful finding even if the overall table shows monotonic improvement.
+
+D1 (n=5, below detection floor) and D3/D4 (easy targets) are not tabulated separately — report in supplementary per-D-scale breakdown only.
+
+Conditions 1–5 are the paper's ablation tables.
 
 ---
 
