@@ -82,18 +82,39 @@ Report pixel F1/F2 AND polygon metrics separately for D1, D2, D3, D4 on Tromsø 
 
 ## Statistical validity
 
-- 3 seeds per configuration → report mean ± std
-- Single-scene test set (Tromsø, 117 polygons) limits statistical power — report confidence intervals
+> ✓ DECIDED: bootstrap CIs + permutation test for D2. Details below.
 
-> ⚠ OPEN: bootstrap confidence intervals vs analytical. Bootstrap preferred given non-normal distribution of pixel predictions across polygons.
+### Training variance
+
+3 seeds per configuration → report mean ± std across seeds. This captures model initialization variance.
+
+### Bootstrap confidence intervals (per-D-scale)
+
+For each trained model, bootstrap-resample the test polygons within each D-scale class
+(10,000 draws with replacement), recompute per-class pixel F2 each draw, report 95% CI.
+
+This is critical for D2 (n=25): 3-seed mean ± std hides the small-sample problem.
+Bootstrap CIs give honest uncertainty bounds that reflect the actual number of test objects.
+Costs seconds on CPU — no additional GPU time.
+
+Report both: across-seed variance ("how stable is training?") and bootstrap CI
+("how confident are we given n=25?").
+
+### Permutation test for D2
+
+Shuffle D-scale labels across all 117 Tromsø polygons, recompute "D2" pixel F2 on the
+shuffled set, repeat 10,000 times. Report p-value.
+
+This answers: "is our D2 detection significantly better than chance, or are we just
+picking up D3 edges?" Cheap insurance against reviewer skepticism on small-n results.
 
 ---
 
 ## Success criteria (updated)
 
-- **Win**: pixel F1 ≥ 0.806 AND/OR pixel F2 ≥ 0.841 with ~500–600K parameters (~4× fewer than Gatti's 2.39M)
-- **Partial win**: within 5% of targets — report parameter efficiency argument (equivariant CNN vs vision transformer)
-- **Informative loss**: document what the capacity gap costs; motivates Phase 3
+- **Full win**: pixel F1 ≥ 0.806 AND meaningful D2 recall (bootstrap CI above chance, permutation p < 0.05)
+- **Partial win**: pixel F1 ≥ 0.806 but D2 recall weak — report which regularization techniques helped and which didn't
+- **Informative loss**: document what the capacity/resolution gap costs for small deposits; motivates Phase 3
 
 ---
 
