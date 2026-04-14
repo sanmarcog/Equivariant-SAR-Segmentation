@@ -228,7 +228,7 @@ def validate(
     loader: DataLoader,
     device: torch.device,
 ) -> dict[str, float]:
-    """Compute pixel-level F1 and F2 at threshold 0.5 on val set."""
+    """Compute pixel-level F1, F2 (threshold sweep) and AUPRC on val set."""
     model.eval()
     all_prob = []
     all_gt   = []
@@ -244,9 +244,9 @@ def validate(
     prob_all = torch.cat(all_prob).view(-1).numpy()
     gt_all   = torch.cat(all_gt).view(-1).numpy()
 
-    # Sweep thresholds for best F1 and F2
-    from src.evaluate import sweep_thresholds
+    from src.evaluate import sweep_thresholds, auprc
     results = sweep_thresholds(prob_all, gt_all)
+    results["auprc"] = auprc(prob_all, gt_all)
     return results
 
 
@@ -334,8 +334,10 @@ def train(
         )
 
     # ── Training loop ─────────────────────────────────────────────────
-    best_f2    = -1.0
-    best_ckpt  = out_dir / f"best_cond{condition}_seed{seed}.pt"
+    best_auprc  = -1.0
+    no_improve  = 0
+    patience    = 20
+    best_ckpt   = out_dir / f"best_cond{condition}_seed{seed}.pt"
 
     for epoch in range(1, epochs + 1):
         t0 = time.time()
@@ -349,10 +351,10 @@ def train(
 
         log.info(
             "Epoch %3d/%d | loss=%.4f seg=%.4f area=%.4f | "
-            "val F1=%.4f F2=%.4f | lr=%.2e | %.1fs",
+            "val F1=%.4f F2=%.4f AUPRC=%.4f | lr=%.2e | %.1fs",
             epoch, epochs,
             train_metrics["loss"], train_metrics["loss_seg"], train_metrics["loss_area"],
-            val_metrics["best_f1"], val_metrics["best_f2"],
+            val_metrics["best_f1"], val_metrics["best_f2"], val_metrics["auprc"],
             scheduler.get_last_lr()[0], elapsed,
         )
 
@@ -365,13 +367,16 @@ def train(
                 "train/area":    train_metrics["loss_area"],
                 "val/f1":        val_metrics["best_f1"],
                 "val/f2":        val_metrics["best_f2"],
+                "val/auprc":     val_metrics["auprc"],
                 "val/thr_f1":    val_metrics["thr_f1"],
                 "val/thr_f2":    val_metrics["thr_f2"],
                 "lr":            scheduler.get_last_lr()[0],
             })
 
-        if val_metrics["best_f2"] > best_f2:
-            best_f2 = val_metrics["best_f2"]
+        # Checkpoint on best AUPRC
+        if val_metrics["auprc"] > best_auprc:
+            best_auprc = val_metrics["auprc"]
+            no_improve = 0
             torch.save({
                 "epoch":       epoch,
                 "state_dict":  model.state_dict(),
@@ -379,14 +384,24 @@ def train(
                 "cfg":         cfg,
                 "hyperparams": dict(gamma=gamma, alpha=alpha, beta=beta, pos_frac=pos_frac),
             }, best_ckpt)
-            log.info("  ↑ new best val F2=%.4f  saved → %s", best_f2, best_ckpt)
+            log.info("  ↑ new best val AUPRC=%.4f  saved → %s", best_auprc, best_ckpt)
+        else:
+            # Only count non-improvement after warmup
+            if epoch > warmup_epochs:
+                no_improve += 1
+                if no_improve >= patience:
+                    log.info(
+                        "Early stopping at epoch %d (no AUPRC improvement for %d epochs)",
+                        epoch, patience,
+                    )
+                    break
 
     if use_wandb:
         import wandb
         wandb.finish()
 
-    log.info("Training complete. Best val F2=%.4f", best_f2)
-    return {"best_f2": best_f2, "ckpt": str(best_ckpt)}
+    log.info("Training complete. Best val AUPRC=%.4f", best_auprc)
+    return {"best_auprc": best_auprc, "ckpt": str(best_ckpt)}
 
 
 # ---------------------------------------------------------------------------
@@ -430,11 +445,11 @@ def grid_search(
         except Exception as e:
             log.error("Grid run %s failed: %s", key, e)
 
-    results.sort(key=lambda r: -r["best_f2"])
+    results.sort(key=lambda r: -r["best_auprc"])
     grid_path = out_dir / "grid_results.json"
     with open(grid_path, "w") as f:
         json.dump(results, f, indent=2)
-    log.info("Grid search complete. Best: %s  (F2=%.4f)", results[0]["key"], results[0]["best_f2"])
+    log.info("Grid search complete. Best: %s  (AUPRC=%.4f)", results[0]["key"], results[0]["best_auprc"])
     log.info("Results saved → %s", grid_path)
 
 
