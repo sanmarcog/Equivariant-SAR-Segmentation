@@ -123,8 +123,10 @@ Monitor val precision as early warning for artifact learning.
 - positive patch fraction: {0.4, 0.5, 0.6}
 
 **Fixed hyperparameters**:
+- Optimizer: AdamW, LR=1e-4
+- LR scheduler: cosine decay with 10-epoch linear warmup
+- Early stopping: patience=20 on val AUPRC (matching Gatti protocol)
 - Label smoothing: ε=0.05
-- LR scheduler: cosine decay
 - Seeds: 3 per configuration; report mean ± std
 
 ---
