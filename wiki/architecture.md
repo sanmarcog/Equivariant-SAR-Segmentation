@@ -69,7 +69,39 @@ L = L_seg + λ_area × L_area
 
 ## Preprocessing additions (vs Phase 1)
 
-- **Speckle filter**: Lee or Refined Lee 5×5 applied to VH and VV channels before patching
-- **Label smoothing**: replace hard {0,1} GT labels with {ε, 1−ε}, ε=0.05 — fixes T≈50 logit collapse seen in Phase 1 temperature scaling
+- **Speckle filter**: Refined Lee 5×5 applied to VH and VV channels before patching.
+  Standard Lee blurs edges and hurts small deposit detection — Refined Lee preserves edges.
+  Applied before patching (physically correct; ensures consistent noise level across patches).
 
-> ⚠ OPEN: apply speckle filter before or after patching? Before is physically correct; after is faster. Probably before.
+- **Log-ratio change image**: compute `log(VH_post / VH_pre)` and `log(VV_post / VV_pre)`
+  pixel-wise before patching, and include as additional input channels alongside the raw dB values.
+  SAR speckle is multiplicative — log-ratio suppresses it more effectively than subtraction.
+  Physically: log-ratio isolates the surface change signal from shared scene geometry.
+
+- **LIA normalization**: normalize VH and VV backscatter by Local Incidence Angle (LIA) raster
+  before patching. LIA raster is already present in AvalCD. Reduces geometry-driven false
+  negatives on steep slopes (Phase 1's genuine miss was caused by LIA=5°).
+
+- **VH/VV ratio channel**: add `VH_post / VV_post` and `VH_pre / VV_pre` as input channels.
+  Cross-polarization ratio is sensitive to surface roughness change and partially cancels
+  geometry effects. Low cost — computed from existing channels.
+
+- **Label smoothing**: replace hard {0,1} GT labels with {ε, 1−ε}, ε=0.05 — fixes T≈50
+  logit collapse seen in Phase 1 temperature scaling.
+
+> ✓ DECIDED: use Refined Lee (not standard Lee); apply before patching.
+
+> ⚠ OPEN: exact input channel layout needs updating. With log-ratio and VH/VV ratio added,
+> channel count increases from 5 (post-only) / 7 (bi-temporal) to a larger set.
+> Settle the full channel list before writing the dataset loader.
+
+## Feasibility investigations (not yet committed)
+
+- **Multi-temporal pre-event stacking**: median of 3–5 pre-event Sentinel-1 acquisitions as
+  reference instead of single pre-event image. Would significantly lower the noise floor and
+  improve D2 sensitivity. Requires downloading additional scenes beyond AvalCD. 
+  See [open_questions.md](open_questions.md) Q4.
+
+- **NL-SAR despeckling**: non-local SAR filter, better edge preservation than Refined Lee,
+  state of the art for small-object detection in SAR. Adds implementation complexity.
+  See [open_questions.md](open_questions.md) Q5.

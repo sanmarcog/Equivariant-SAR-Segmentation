@@ -39,6 +39,42 @@ Sub-questions:
 
 ---
 
+## Q4: Is multi-temporal pre-event stacking feasible for this dataset?
+
+**Hypothesis**: median of 3–5 pre-event Sentinel-1 acquisitions as reference image lowers
+the noise floor and improves D2 sensitivity compared to single pre-event image.
+
+Feasibility questions:
+- Are additional pre-event Sentinel-1 scenes available for all 5 training regions (Livigno,
+  Nuuk, Pish) within a reasonable temporal window (e.g., 30–60 days before each event)?
+- Is the geometric co-registration quality sufficient for pixel-level stacking at 10m GRD?
+- Does the snow surface change significantly between acquisitions, invalidating a stable
+  reference assumption? (Especially relevant for Nuuk and Tromsø.)
+- What is the download and storage cost (each S1 GRD scene ~1 GB)?
+
+**Decision gate**: answer these before committing to implementation. If available scenes
+exist and co-registration is feasible, this is the highest-impact preprocessing improvement.
+
+---
+
+## Q5: Is NL-SAR despeckling worth the implementation cost?
+
+**Hypothesis**: Non-local SAR despeckling preserves deposit edges better than Refined Lee,
+improving D2 boundary delineation in the segmentation mask.
+
+Feasibility questions:
+- Is there a maintained Python implementation of NL-SAR compatible with our pipeline
+  (rasterio/numpy inputs)?
+- What is the runtime cost per scene vs Refined Lee? (NL-SAR is O(n²) in patch comparisons)
+- Is the edge-preservation gain measurable on AvalCD GRD data, or is it marginal at 10m
+  resolution where speckle is already partially averaged by multi-looking?
+
+**Decision gate**: benchmark Refined Lee vs NL-SAR on one Tromsø scene before committing.
+If runtime is acceptable and D2 boundary IoU improves, include. Otherwise Refined Lee is
+sufficient.
+
+---
+
 ## Additional unresolved decisions
 
 See `> ⚠ OPEN` callouts in:

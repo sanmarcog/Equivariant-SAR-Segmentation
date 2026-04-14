@@ -48,24 +48,46 @@
 
 ---
 
-## Input channels (unchanged from Phase 1)
+## Input channels (Phase 2 — expanded for small deposit detection)
 
-`[VH_post, VV_post, slope, sin(aspect), cos(aspect)]` = 5 channels, 64×64 patches
+Phase 1 used 5 channels. Phase 2 adds log-ratio, LIA-normalized, and cross-pol ratio channels:
 
-- For bi-temporal models: additionally `[VH_pre, VV_pre]` → 7 channels total (3 DEM-derived shared)
-- VH/VV clipped to [−25, −5] dB per arXiv:2502.18157
+| Channel | Description | New? |
+|---------|-------------|------|
+| VH_post (dB) | Post-event VH backscatter, clipped [−25,−5] dB | Phase 1 |
+| VV_post (dB) | Post-event VV backscatter, clipped [−25,−5] dB | Phase 1 |
+| slope | Terrain slope from DEM | Phase 1 |
+| sin(aspect) | Terrain aspect (sine component) | Phase 1 |
+| cos(aspect) | Terrain aspect (cosine component) | Phase 1 |
+| VH_pre (dB) | Pre-event VH backscatter | Phase 1 (bi-temporal) |
+| VV_pre (dB) | Pre-event VV backscatter | Phase 1 (bi-temporal) |
+| log(VH_post/VH_pre) | Log-ratio change, VH — multiplicative speckle suppression | **Phase 2** |
+| log(VV_post/VV_pre) | Log-ratio change, VV | **Phase 2** |
+| VH_post/VV_post | Cross-pol ratio, post — surface roughness proxy | **Phase 2** |
+| VH_pre/VV_pre | Cross-pol ratio, pre | **Phase 2** |
+| LIA | Local Incidence Angle (raster already in AvalCD) | **Phase 2** |
+
+All SAR channels (VH, VV) LIA-normalized before log-ratio and ratio computation.
+
+> ⚠ OPEN: final channel count is 12. Norm stats from Phase 1 (7 channels) are invalid —
+> new norm stats must be computed on train split before any training run.
+
+> ⚠ OPEN: D4-BT backbone was trained on 5-channel input. Adding channels requires either
+> (a) fine-tuning the full backbone from scratch or (b) adding a learned projection layer
+> before the frozen backbone. Decision deferred to ablation.
 
 ---
 
 ## Normalization
 
-- Norm stats JSON from Phase 1: `data/splits/norm_stats_bitemporal.json`
-- Stats computed on train split only; applied at inference
+- Phase 1 norm stats (`norm_stats_bitemporal.json`) are **not reusable** — channel set changed.
+- New norm stats must be computed on train split (Livigno+Nuuk+Pish) before training.
 
 ---
 
 ## What's new in Phase 2
 
 - Pixel-level GT rasters (already in AvalCD; Phase 1 didn't use them)
-- SeNorge variables (new download)
+- Expanded input channels: log-ratio, cross-pol ratio, LIA normalization
+- SeNorge variables (new download, supplementary)
 - No new SAR scenes added
