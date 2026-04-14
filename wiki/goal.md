@@ -20,9 +20,15 @@
 
 ## Primary goals
 
-1. **Match or beat Gatti et al. 2026** on pixel-level F1 ≥ 0.806 / F2 ≥ 0.841 on Tromsø OOD, with ~4× fewer parameters (~500–600K vs 2.39M). Gatti uses SwinV2-Tiny (vision transformer); we use D4-equivariant CNN.
-2. **Deposit area pipeline**: pixel mask → georeferenced polygon → area in m² → D-scale proxy label.
-3. **D2 detection advantage**: test whether 64×64 patches at 75% overlap outperform 128×128 at 50% overlap for small deposits.
+1. **Match or beat Gatti et al. 2026** on pixel-level F1 ≥ 0.806 / F2 ≥ 0.841 on Tromsø OOD. Gatti uses SwinV2-Tiny (vision transformer, ~2.39M params); we use D4-equivariant CNN (~500–600K params).
+2. **D2 detection**: demonstrate meaningful recall on D2-class deposits (25 polygons, ~600–5000 m²). This is the hard target — just above the speckle floor at 10m GRD. Everything in Phase 2 (75% overlap, biased sampling, Focal+Tversky loss, skip connections, copy-paste augmentation) is ultimately in service of not losing D2. D1 (n=5) is likely below the detection floor and not expected to be recoverable.
+
+> The paper's central claim is that an equivariant CNN can match a vision transformer on overall metrics AND detect small avalanches that are inherently hard at this resolution. Parameter efficiency (~4× fewer) is supporting evidence, not the headline.
+
+## Secondary goals
+
+3. **Deposit area pipeline**: pixel mask → georeferenced polygon → area in m² → D-scale proxy label.
+4. **D2 detection advantage**: test whether 64×64 patches at 75% overlap outperform 128×128 at 50% overlap for small deposits.
 
 ## Supplementary goal
 
@@ -34,8 +40,8 @@
 
 > ✓ DECIDED: primary metric is **pixel-level** F1/F2 matching Gatti's protocol exactly (threshold sweep on val, report best F1 at F1-optimized threshold and best F2 at F2-optimized threshold). Polygon-level metrics reported as supplementary.
 
-- **Win**: pixel F1 ≥ 0.806 with ~500–600K parameters
-- **Partial win**: pixel F1 within 5% of 0.806 — report parameter efficiency argument
-- **Informative loss**: document what the capacity gap costs; motivates Phase 3
+- **Full win**: pixel F1 ≥ 0.806 AND meaningful D2 recall (per-D-scale F2_D2 reported)
+- **Partial win**: pixel F1 ≥ 0.806 but D2 recall weak — report what regularization helped and what didn't
+- **Informative loss**: document what the capacity/resolution gap costs for small deposits; motivates Phase 3
 
 See [evaluation.md](evaluation.md) for metric details and [baselines.md](baselines.md) for Gatti protocol.

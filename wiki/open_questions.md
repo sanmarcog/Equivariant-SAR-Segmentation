@@ -4,22 +4,23 @@
 
 ---
 
-## Q1: Can equivariant segmentation match or beat Gatti et al. 2026 with fewer parameters?
+## Q1: Can equivariant segmentation match Gatti et al. 2026 AND detect small avalanches?
 
-**Operationalization**: Pixel-level F1 ≥ 0.806 and/or pixel F2 ≥ 0.841 on Tromsø OOD, with ~500–600K parameters (~4× fewer than Gatti's 2.39M SwinV2-Tiny).
+**Operationalization**: Pixel-level F1 ≥ 0.806 and/or pixel F2 ≥ 0.841 on Tromsø OOD, with demonstrated D2-class recall. Parameter efficiency (~4× fewer params) is supporting evidence, not the primary claim.
 
 > ✓ DECIDED: comparison is pixel-level F1/F2 (matching Gatti's protocol). Polygon-level F1/F2 is supplementary.
 
 Sub-questions:
 - Does the D4 symmetry group still provide benefit in a segmentation setting (vs classification)?
 - Does label smoothing (ε=0.05) adequately fix the T≈50 logit collapse?
-- Do our 4 additional engineered channels (log-ratio, cross-pol ratio) compensate for fewer parameters?
+- Do our 4 additional engineered channels (log-ratio, cross-pol ratio) help with D2 detection?
+- Which regularization technique contributes most to D2 recall? (answered by ablation)
 
 ---
 
 ## Q2: Does 64×64 patching at 75% overlap give measurable D2 detection advantage vs 128×128?
 
-**Operationalization**: Compare D2-class pixel F2 against our own 128×128 baseline (Gatti does not report per-D-scale).
+**Operationalization**: Compare D2-class pixel F2 against our own 128×128 baseline (Gatti does not report per-D-scale). This is co-primary with Q1 — if we nail overall F1/F2 but miss D2, the result is weak.
 
 Sub-questions:
 - At stride=16, how many patches cover a typical D2 polygon (area ~600–5000 m²)?
