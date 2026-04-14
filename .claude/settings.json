@@ -1,0 +1,27 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//Users/sanmarco/Documents/GitHub/Equivariant-CNN-SAR/**)",
+      "Bash(python3 -c ':*)",
+      "Skill(update-config)",
+      "Skill(update-config:*)",
+      "Bash(python3 -c ' *)",
+      "Read(//Users/sanmarco/**)",
+      "Bash(pip3 show *)",
+      "Bash(python3 -c \"import sys; print\\('\\\\n'.join\\(sys.path\\)\\)\")",
+      "Bash(ls ~/miniforge3/lib/python3*/site-packages/escnn)",
+      "Bash(ls ~/opt/anaconda*/lib/python3*/site-packages/escnn)",
+      "Bash(conda run *)",
+      "Bash(mamba run *)",
+      "Bash(mamba env *)",
+      "Bash(/opt/anaconda3/bin/conda run *)",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(sync-sar2)",
+      "Bash(rsync -avz --exclude __pycache__ --exclude \"*.pyc\" --exclude .git --exclude data/ --exclude .venv/ /Users/sanmarco/Documents/GitHub/Equivariant-SAR-Segmentation/ klone:/gscratch/scrubbed/sanmarco/equivariant-sar-seg/)"
+    ],
+    "additionalDirectories": [
+      "/Users/sanmarco/.claude"
+    ]
+  }
+}
