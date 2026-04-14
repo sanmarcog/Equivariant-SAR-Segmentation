@@ -59,6 +59,15 @@ L = L_seg + λ_area × L_area
 with extra weight on D1/D2-sized deposits. Prevents model from ignoring rare small deposits.
 Remaining 50% sampled randomly (maintains background representation).
 
+**Copy-paste augmentation**: paste D2/D1 deposit patches onto background regions within
+the same region only (Livigno→Livigno, Nuuk→Nuuk, Pish→Pish — no cross-region pasting).
+Apply Gaussian edge blending at paste boundary. Cap at 20–30% of positive patches per batch.
+Monitor val precision as early warning for artifact learning.
+
+**Dropout**: 0.3 on the bottleneck ([B, 256, 4, 4]) — carried over from Phase 1.
+
+**Regularization**: weight decay 1e-4 (L2).
+
 **Hyperparameters to tune on val F2** (grid search before full training run):
 - γ (focal loss): {1, 2, 3}
 - α/β (Tversky): {0.3/0.7, 0.2/0.8}
@@ -66,9 +75,25 @@ Remaining 50% sampled randomly (maintains background representation).
 
 **Fixed hyperparameters**:
 - Label smoothing: ε=0.05
-- Weight decay: 1e-4 (L2 regularization)
 - LR scheduler: cosine decay
 - Seeds: 3 per configuration; report mean ± std
+
+---
+
+## Ablation plan
+
+Run in this order; each condition uses 3 seeds:
+
+| # | Condition | Purpose |
+|---|-----------|---------|
+| 1 | Baseline: 12ch input, random sampling, BCE, no skip connections | Phase 2 starting point |
+| 2 | + biased patch sampling | Isolate sampling effect |
+| 3 | + Focal + Tversky loss | Isolate loss effect |
+| 4 | + U-Net skip connections | Isolate architecture effect |
+| 5 | + copy-paste augmentation | Full system |
+
+Report polygon F1/F2 overall and per D-scale for each condition.
+Conditions 1–5 are the paper's ablation table.
 
 ---
 
