@@ -13,10 +13,9 @@
 - 7 acquisition events
 - Phase 2 uses **pixel-level GT rasters** (not just patch labels) — all scenes have binary debris masks
 
-> ⚠ OPEN: Zenodo lists the dataset creator as "Mattia Gatti (University of Insubria)" but the
-> companion paper (arXiv:2603.22658) is attributed to "Gattimgatti et al." Verify whether these
-> are the same person (surname variation) before final paper submission. Phase 1 README currently
-> cites the dataset as "Gattimgatti et al." which may be wrong.
+> ✓ DECIDED: dataset creator is Gatti, Mattia (University of Insubria). Both Phase 1 README
+> and Phase 2 wiki now cite correctly as "Gatti, M. et al." The companion paper (arXiv:2603.22658)
+> author "Gattimgatti" is a different person; the dataset and paper have different first authors.
 
 ### Geographic split (identical to Phase 1 and Gattimgatti 2026)
 
