@@ -4,13 +4,13 @@
 
 ---
 
-## Q1: Can equivariant segmentation match or beat Gattimgatti 2026 with 6× fewer parameters?
+## Q1: Can equivariant segmentation match or beat Gattimgatti 2026 with fewer parameters?
 
-**Operationalization**: F1 ≥ 0.806 and/or F2 ≥ 0.841 on Tromsø OOD, with ≤391K parameters.
+**Operationalization**: F1 ≥ 0.806 and/or F2 ≥ 0.841 on Tromsø OOD, with ~500–600K parameters
+(~4× fewer than Gattimgatti's 2.39M; skip connections added since original estimate of 391K).
 
 Sub-questions:
 - Does the D4 symmetry group still provide benefit in a segmentation setting (vs classification)?
-- Does freezing the Phase 1 backbone hurt performance relative to fine-tuning end-to-end?
 - Does label smoothing (ε=0.05) adequately fix the T≈50 logit collapse?
 
 ---
@@ -73,26 +73,13 @@ Multi-temporal stacking is not worth implementing for Phase 2. Close Q4.
 
 ## Q5: Is NL-SAR despeckling worth the implementation cost?
 
-**Hypothesis**: Non-local SAR despeckling preserves deposit edges better than Refined Lee,
-improving D2 boundary delineation in the segmentation mask.
-
-Feasibility questions:
-- Is there a maintained Python implementation of NL-SAR compatible with our pipeline
-  (rasterio/numpy inputs)?
-- What is the runtime cost per scene vs Refined Lee? (NL-SAR is O(n²) in patch comparisons)
-- Is the edge-preservation gain measurable on AvalCD GRD data, or is it marginal at 10m
-  resolution where speckle is already partially averaged by multi-looking?
-
-**Decision gate**: benchmark Refined Lee vs NL-SAR on one Tromsø scene before committing.
-If runtime is acceptable and D2 boundary IoU improves, include. Otherwise Refined Lee is
-sufficient.
+**CLOSED — not pursued.** No maintained Python implementation; GRD already multi-looked;
+marginal gain over Refined Lee at 10m resolution.
 
 ---
 
 ## Additional unresolved decisions
 
-See `> ⚠ OPEN` callouts in:
-- [architecture.md](architecture.md): freeze vs fine-tune, skip connections, speckle filter timing, Dice vs BCE
 - [evaluation.md](evaluation.md): exact IoU threshold used by Gattimgatti, bootstrap vs analytical CIs
 - [datasets.md](datasets.md): D1 exclusion from size classifier, SeNorge variable names
 - [size_estimation.md](size_estimation.md): empirical area thresholds for D-scale boundaries

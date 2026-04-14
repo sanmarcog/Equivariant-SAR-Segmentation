@@ -1,49 +1,41 @@
 # Architecture — Phase 2
 
-**D4-BT backbone (frozen or fine-tuned) + equivariant segmentation decoder + differentiable area regression head.**
+**D4-BT backbone + equivariant segmentation decoder + area regression head. Retrained from scratch.**
 
 ---
 
-## Backbone: D4BiTemporalCNN (Phase 1)
+## Backbone: D4BiTemporalCNN
 
 - Shared-weight D4-equivariant encoder applied to post and pre patches separately
 - Change feature: `GroupPooling(feat_post − feat_pre)` → global avg pool → [B, 256]
-- ~391K parameters total (parameter count may change slightly with new input channels)
-- Phase 1 checkpoint: best AUC=0.912 at 50% data fraction (Tromsø OOD) — **not reused**
-
-> ✓ DECIDED: retrain backbone from scratch with Phase 2 input channels (12 channels vs Phase 1's 5/7).
-> The Phase 1 checkpoint is incompatible with the new channel layout. Retraining is the clean solution;
-> the task also changes (segmentation vs classification) so Phase 1 weights are not a strong prior anyway.
-> Phase 1 checkpoint kept as reference only.
+- Retrained from scratch with 12-channel input — Phase 1 checkpoint not reused
 
 ---
 
 ## Segmentation decoder
 
-4-stage upsampling path mirroring the encoder:
+4-stage equivariant upsampling with U-Net skip connections from encoder:
 
 ```
 Encoder features [B, 256, 4, 4]
-  → R2Conv equivariant (regular → regular, 128ch) + BN + ELU + ConvTranspose2d ×2  → [B, 128, 8, 8]
-  → R2Conv equivariant (128 → 64ch)  + BN + ELU + ConvTranspose2d ×2              → [B, 64, 16, 16]
-  → R2Conv equivariant (64 → 32ch)   + BN + ELU + ConvTranspose2d ×2              → [B, 32, 32, 32]
-  → R2Conv equivariant (32 → 16ch)   + BN + ELU + ConvTranspose2d ×2              → [B, 16, 64, 64]
-  → Conv2d 1×1 (trivial repr → scalar)                                             → [B, 1, 64, 64]  (logit mask)
+  → R2Conv (128ch) + BN + ELU + ConvTranspose2d ×2  → [B, 128, 8, 8]  ← skip from enc stage 4
+  → R2Conv (64ch)  + BN + ELU + ConvTranspose2d ×2  → [B, 64, 16, 16] ← skip from enc stage 3
+  → R2Conv (32ch)  + BN + ELU + ConvTranspose2d ×2  → [B, 32, 32, 32] ← skip from enc stage 2
+  → R2Conv (16ch)  + BN + ELU + ConvTranspose2d ×2  → [B, 16, 64, 64] ← skip from enc stage 1
+  → Conv2d 1×1 (trivial repr → scalar)              → [B, 1, 64, 64]  (logit mask)
 ```
 
-> ⚠ OPEN: skip connections from encoder to decoder (U-Net style). Would improve small-deposit recall but increases parameter count and couples backbone to decoder more tightly.
+Skip connections preserve fine-scale spatial detail for small (D2) deposit boundaries.
+Parameter count: ~500–600K (up from ~391K; still ~4× fewer than Gattimgatti's 2.39M).
 
 ---
 
 ## Area regression head
 
-- Input: sigmoid of logit mask, thresholded at 0.5 → binary mask
-- `area_pixels = mask.sum(dim=[1,2,3])`
-- `area_m2 = area_pixels × (pixel_size_m)²`  where pixel_size_m = 10.0 (Sentinel-1 GRD)
+- Input: soft mask (sigmoid of logit) for training; hard mask (threshold 0.5) for reporting
+- `area_m2 = soft_mask.sum() × (10.0)²`
 - D-scale proxy: log-linear mapping from area_m2 → {D1, D2, D3, D4} using Tromsø GT thresholds
-- **Differentiable path**: use soft mask (pre-threshold) for training; hard mask for reporting
-
-> ✓ DECIDED: area head is supplementary, not in the main segmentation loss. Only used for size estimation experiment on Tromsø.
+- Supplementary only — not in the main segmentation loss
 
 ---
 
@@ -53,60 +45,58 @@ Encoder features [B, 256, 4, 4]
 L = L_seg + λ_area × L_area
 ```
 
-- `L_seg`: Binary cross-entropy on pixel mask (with positive pixel weight to handle class imbalance)
-- `L_area`: L1 loss on log(area_m2) vs log(GT_area_m2), only for Tromsø samples that have D-scale labels
-- `λ_area`: tuned on val set; default 0.1
+- `L_seg`: Focal loss (γ=2) + Tversky loss (α=0.3, β=0.7), equal weight
+  - Focal: down-weights easy background pixels, forces focus on hard small-deposit pixels
+  - Tversky: FN penalized 2.3× more than FP — optimizes recall on rare deposits
+- `L_area`: L1 on log(area_m2) vs log(GT_area_m2), Tromsø samples only
+- `λ_area = 0.1` (default; tune on val set)
 
-> ⚠ OPEN: Dice loss vs BCE for L_seg. Dice is better for class-imbalanced segmentation (most pixels are background). Decision deferred to initial experiments.
+---
+
+## Training
+
+**Patch sampling**: biased — 50% of each batch are patches containing ≥1 deposit pixel,
+with extra weight on D1/D2-sized deposits. Prevents model from ignoring rare small deposits.
+Remaining 50% sampled randomly (maintains background representation).
+
+**Hyperparameters to tune on val F2** (grid search before full training run):
+- γ (focal loss): {1, 2, 3}
+- α/β (Tversky): {0.3/0.7, 0.2/0.8}
+- positive patch fraction: {0.4, 0.5, 0.6}
+
+**Fixed hyperparameters**:
+- Label smoothing: ε=0.05
+- Weight decay: 1e-4 (L2 regularization)
+- LR scheduler: cosine decay
+- Seeds: 3 per configuration; report mean ± std
 
 ---
 
 ## Inference
 
-- Patch size: 64×64 (unchanged from Phase 1)
-- Stride: 16 (75% overlap) — improves D2 detection; see [open_questions.md](open_questions.md) Q2
-- Patch logits stitched into full-scene mask via average pooling in overlap regions
-- Final scene mask thresholded at 0.5 → binary → connected components → polygon extraction
+- Patch size: 64×64, stride: 16 (75% overlap)
+- Patch logits stitched via average pooling in overlap regions
+- Threshold at 0.5 → binary → connected components → polygon extraction
+- TTA: horizontal + vertical flip (4 variants averaged)
 
 ---
 
-## Preprocessing additions (vs Phase 1)
+## Preprocessing (applied scene-wide before patching)
 
-- **Speckle filter**: Refined Lee 5×5 applied to VH and VV channels before patching.
-  Standard Lee blurs edges and hurts small deposit detection — Refined Lee preserves edges.
-  Applied before patching (physically correct; ensures consistent noise level across patches).
+Input channels (12 total — see [datasets.md](datasets.md) for full spec):
 
-- **Log-ratio change image**: compute `log(VH_post / VH_pre)` and `log(VV_post / VV_pre)`
-  pixel-wise before patching, and include as additional input channels alongside the raw dB values.
-  SAR speckle is multiplicative — log-ratio suppresses it more effectively than subtraction.
-  Physically: log-ratio isolates the surface change signal from shared scene geometry.
+1. Refined Lee 5×5 on VH and VV (preserves edges; applied first)
+2. LIA normalization on VH/VV
+3. Compute log-ratio: `log(VH_post/VH_pre)`, `log(VV_post/VV_pre)`
+4. Compute cross-pol ratio: `VH_post/VV_post`, `VH_pre/VV_pre`
+5. Clip VH/VV to [−25, −5] dB
+6. Normalize all channels with train-split stats (must recompute — Phase 1 stats invalid)
 
-- **LIA normalization**: normalize VH and VV backscatter by Local Incidence Angle (LIA) raster
-  before patching. LIA raster is already present in AvalCD. Reduces geometry-driven false
-  negatives on steep slopes (Phase 1's genuine miss was caused by LIA=5°).
+---
 
-- **VH/VV ratio channel**: add `VH_post / VV_post` and `VH_pre / VV_pre` as input channels.
-  Cross-polarization ratio is sensitive to surface roughness change and partially cancels
-  geometry effects. Low cost — computed from existing channels.
+## Rejected approaches
 
-- **Label smoothing**: replace hard {0,1} GT labels with {ε, 1−ε}, ε=0.05 — fixes T≈50
-  logit collapse seen in Phase 1 temperature scaling.
-
-> ✓ DECIDED: use Refined Lee (not standard Lee); apply before patching.
-
-> ⚠ OPEN: exact input channel layout needs updating. With log-ratio and VH/VV ratio added,
-> channel count increases from 5 (post-only) / 7 (bi-temporal) to a larger set.
-> Settle the full channel list before writing the dataset loader.
-
-## Feasibility investigations
-
-- **Multi-temporal pre-event stacking**: ✗ REJECTED (2026-04-14).
-  Toy experiment showed 2-scene median stack has 2.6× higher std and lower polygon contrast
-  than the AvalCD single pre-event at all D-scales. Root cause: systematic snowpack
-  backscatter change between Nov/Dec acquisitions and actual event date overwhelms any
-  speckle reduction benefit. Single pre-event from AvalCD (calibrated, close in time) is
-  better. See [open_questions.md](open_questions.md) Q4 for full results.
-
-- **NL-SAR despeckling**: not pursued. No maintained Python implementation; GRD already
-  multi-looked; marginal gain over Refined Lee at 10m resolution.
-  See [open_questions.md](open_questions.md) Q5.
+- **Multi-temporal pre-event stacking**: toy experiment (2026-04-14) showed 2-scene stack
+  has 2.6× higher std and worse polygon contrast than single AvalCD pre-event at all D-scales.
+  Systematic snowpack change between acquisition dates dominates any noise benefit. Closed.
+- **NL-SAR despeckling**: no maintained Python lib; marginal gain at 10m GRD. Closed.
