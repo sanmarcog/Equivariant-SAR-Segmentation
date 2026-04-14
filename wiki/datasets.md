@@ -6,10 +6,17 @@
 
 ## AvalCD — primary dataset
 
+- **Citation**: Gatti, M. et al. (2026). *AvalCD dataset.* Zenodo. doi:[10.5281/zenodo.15863589](https://zenodo.org/records/15863589)
+- **License**: CC BY-NC 4.0
 - Source: Zenodo (1.1 GB)
 - 4 regions: Livigno (Italy), Nuuk (Greenland), Pish (Tajikistan), Tromsø (Norway)
 - 7 acquisition events
 - Phase 2 uses **pixel-level GT rasters** (not just patch labels) — all scenes have binary debris masks
+
+> ⚠ OPEN: Zenodo lists the dataset creator as "Mattia Gatti (University of Insubria)" but the
+> companion paper (arXiv:2603.22658) is attributed to "Gattimgatti et al." Verify whether these
+> are the same person (surname variation) before final paper submission. Phase 1 README currently
+> cites the dataset as "Gattimgatti et al." which may be wrong.
 
 ### Geographic split (identical to Phase 1 and Gattimgatti 2026)
 
