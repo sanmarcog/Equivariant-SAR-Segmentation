@@ -4,27 +4,29 @@
 
 ---
 
-## Q1: Can equivariant segmentation match or beat Gattimgatti 2026 with fewer parameters?
+## Q1: Can equivariant segmentation match or beat Gatti et al. 2026 with fewer parameters?
 
-**Operationalization**: F1 ≥ 0.806 and/or F2 ≥ 0.841 on Tromsø OOD, with ~500–600K parameters
-(~4× fewer than Gattimgatti's 2.39M; skip connections added since original estimate of 391K).
+**Operationalization**: Pixel-level F1 ≥ 0.806 and/or pixel F2 ≥ 0.841 on Tromsø OOD, with ~500–600K parameters (~4× fewer than Gatti's 2.39M SwinV2-Tiny).
+
+> ✓ DECIDED: comparison is pixel-level F1/F2 (matching Gatti's protocol). Polygon-level F1/F2 is supplementary.
 
 Sub-questions:
 - Does the D4 symmetry group still provide benefit in a segmentation setting (vs classification)?
 - Does label smoothing (ε=0.05) adequately fix the T≈50 logit collapse?
+- Do our 4 additional engineered channels (log-ratio, cross-pol ratio) compensate for fewer parameters?
 
 ---
 
 ## Q2: Does 64×64 patching at 75% overlap give measurable D2 detection advantage vs 128×128?
 
-**Operationalization**: Compare D2-class recall (F2_D2) against Gattimgatti's equivalent metric if reported.
+**Operationalization**: Compare D2-class pixel F2 against our own 128×128 baseline (Gatti does not report per-D-scale).
 
 Sub-questions:
 - At stride=16, how many patches cover a typical D2 polygon (area ~600–5000 m²)?
 - Does higher overlap increase FP rate for non-deposit background?
 - Does speckle filtering (Lee 5×5) change the tradeoff?
 
-> ⚠ OPEN: Gattimgatti 2026 may not break down results by D-scale. If they don't, this question can only be answered internally (our model at 64×64 vs 128×128).
+> ✓ DECIDED: Gatti et al. do not report per-D-scale breakdown. The D2 detection question is answered internally (our 64×64 vs our 128×128 comparison).
 
 ---
 
@@ -45,42 +47,34 @@ Sub-questions:
 
 **Toy experiment result** (`scripts/stacking_toy_experiment.py`, Tromsø scene):
 
-| D-scale | n  | Single (dB) | Stack 2-scene (dB) | Δ (dB) |
-|---------|----|-------------|-------------------|--------|
-| D1      | 4  | +1.42       | +1.33             | −0.10  |
-| D2      | 25 | +4.47       | +4.50             | +0.03  |
-| D3      | 71 | +5.15       | +4.65             | −0.50  |
-| D4      | 16 | +6.69       | +5.75             | −0.94  |
+| D-scale | n | Single (dB) | Stack 2-scene (dB) | Δ (dB) |
+|---------|----|-----------|--------------------|--------|
+| D1 | 4 | +1.42 | +1.33 | −0.10 |
+| D2 | 25 | +4.47 | +4.50 | +0.03 |
+| D3 | 71 | +5.15 | +4.65 | −0.50 |
+| D4 | 16 | +6.69 | +5.75 | −0.94 |
 
 Polygon contrast (mean signal − background, dB). Higher = cleaner detection.
 
 **Findings**:
-- Stack has 2.6× higher global std (4.80 dB) vs single (1.85 dB) — the stack change image is
-  dominated by large-scale structured variability, not reduced noise.
-- Visually: single shows clean, spatially localized red spots at deposit locations; stack shows
-  broad terrain-following patterns that completely mask the deposit signal.
-- Root cause: in winter Arctic terrain, snowpack backscatter changes systematically between
-  acquisitions (Nov 21 + Dec 3 vs the actual AvalCD pre-event). A median of 2 scenes
-  from 2–4 weeks earlier does NOT represent the actual surface state before the event.
-- With only 2 valid descending scenes available (Dec 8 zip was corrupt), median = mean,
-  providing no robustness against temporal outliers.
-
-**Conclusion**: The AvalCD single pre-event image (close in time, same orbit, calibrated
-to the same processing baseline) is substantially better than a multi-temporal stack.
-Multi-temporal stacking is not worth implementing for Phase 2. Close Q4.
+- Stack has 2.6× higher global std (4.80 dB) vs single (1.85 dB)
+- Root cause: systematic snowpack backscatter change between acquisitions dominates any noise benefit
+- The AvalCD single pre-event image is substantially better than a multi-temporal stack
 
 ---
 
 ## Q5: Is NL-SAR despeckling worth the implementation cost?
 
-**CLOSED — not pursued.** No maintained Python implementation; GRD already multi-looked;
-marginal gain over Refined Lee at 10m resolution.
+**CLOSED — not pursued.** No maintained Python implementation; GRD already multi-looked; marginal gain over Refined Lee at 10m resolution.
 
 ---
 
 ## Additional unresolved decisions
 
-- [evaluation.md](evaluation.md): exact IoU threshold used by Gattimgatti, bootstrap vs analytical CIs
+- [evaluation.md](evaluation.md): IoU threshold for polygon matching (supplementary metric — Gatti doesn't use polygon matching, so we choose our own standard value)
+- [evaluation.md](evaluation.md): bootstrap vs analytical CIs
+- [baselines.md](baselines.md): 112 vs 117 polygon count — likely D1 exclusion (117 − 5 = 112) but needs verification from full paper text
 - [datasets.md](datasets.md): D1 exclusion from size classifier, SeNorge variable names
 - [size_estimation.md](size_estimation.md): empirical area thresholds for D-scale boundaries
-- [baselines.md](baselines.md): Gattimgatti architecture details (need to read paper)
+- [baselines.md](baselines.md): Bianchi & Grahn 2025 — check if they use AvalCD
+- [baselines.md](baselines.md): Bianchi et al. 2021 — not yet ingested

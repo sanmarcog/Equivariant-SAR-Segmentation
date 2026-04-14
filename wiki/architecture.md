@@ -10,6 +10,8 @@
 - Change feature: `GroupPooling(feat_post − feat_pre)` → global avg pool → [B, 256]
 - Retrained from scratch with 12-channel input — Phase 1 checkpoint not reused
 
+> Note: Gatti et al. 2026 use SwinV2-Tiny (vision transformer) with ~2.39M params and 8 input channels (no log-ratio or cross-pol ratio). Our comparison is **equivariant CNN vs vision transformer**, not equivariant vs standard CNN. Our 12-channel input adds 4 engineered features they don't use.
+
 ---
 
 ## Segmentation decoder
@@ -26,7 +28,7 @@ Encoder features [B, 256, 4, 4]
 ```
 
 Skip connections preserve fine-scale spatial detail for small (D2) deposit boundaries.
-Parameter count: ~500–600K (up from ~391K; still ~4× fewer than Gattimgatti's 2.39M).
+Parameter count: ~500–600K (up from ~391K; still ~4× fewer than Gatti et al.'s 2.39M).
 
 ---
 
@@ -50,6 +52,8 @@ L = L_seg + λ_area × L_area
   - Tversky: FN penalized 2.3× more than FP — optimizes recall on rare deposits
 - `L_area`: L1 on log(area_m2) vs log(GT_area_m2), Tromsø samples only
 - `λ_area = 0.1` (default; tune on val set)
+
+> For reference, Gatti et al. 2026 use BCE with positive weight 3.0 (and also tested BCE+Dice and Focal Tversky with α=0.7, β=0.3, γ=1.33 — note their α/β are swapped relative to our convention where α=FP weight, β=FN weight).
 
 ---
 
@@ -92,7 +96,7 @@ Run in this order; each condition uses 3 seeds:
 | 4 | + U-Net skip connections | Isolate architecture effect |
 | 5 | + copy-paste augmentation | Full system |
 
-Report polygon F1/F2 overall and per D-scale for each condition.
+Report pixel-level F1/F2 (primary) and polygon-level F1/F2 (supplementary) overall and per D-scale for each condition.
 Conditions 1–5 are the paper's ablation table.
 
 ---

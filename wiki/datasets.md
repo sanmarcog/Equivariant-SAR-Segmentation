@@ -13,11 +13,10 @@
 - 7 acquisition events
 - Phase 2 uses **pixel-level GT rasters** (not just patch labels) — all scenes have binary debris masks
 
-> ✓ DECIDED: dataset creator is Gatti, Mattia (University of Insubria). Both Phase 1 README
-> and Phase 2 wiki now cite correctly as "Gatti, M. et al." The companion paper (arXiv:2603.22658)
-> author "Gattimgatti" is a different person; the dataset and paper have different first authors.
+> ✓ DECIDED: dataset creator and paper first author are both Gatti, Mattia (University of Insubria).
+> Cited as "Gatti et al. 2026" (corrected from earlier erroneous "Gattimgatti").
 
-### Geographic split (identical to Phase 1 and Gattimgatti 2026)
+### Geographic split (identical to Phase 1 and Gatti et al. 2026)
 
 | Split | Scenes | Notes |
 |-------|--------|-------|
@@ -74,6 +73,8 @@ Phase 1 used 5 channels. Phase 2 adds log-ratio, LIA-normalized, and cross-pol r
 | LIA | Local Incidence Angle (raster already in AvalCD) | **Phase 2** |
 
 All SAR channels (VH, VV) LIA-normalized before log-ratio and ratio computation.
+
+> For reference, Gatti et al. 2026 use 8 channels: pre (VH, VV), post (VH, VV), aux (DEM, slope, aspect, LIA). They do NOT use log-ratio change channels or cross-pol ratio channels. Our 4 additional engineered features (log-ratio VH/VV, cross-pol ratio post/pre) are a differentiator that may help compensate for fewer parameters.
 
 > ⚠ OPEN: final channel count is 12. Norm stats from Phase 1 (7 channels) are invalid —
 > new norm stats must be computed on train split before any training run.

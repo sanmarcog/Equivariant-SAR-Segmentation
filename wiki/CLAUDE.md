@@ -24,7 +24,7 @@ wiki/
   architecture.md    ← model architecture spec
   datasets.md        ← all datasets, splits, GT details
   evaluation.md      ← metrics, matching protocol, comparison targets
-  baselines.md       ← Gattimgatti 2026 and other comparators
+  baselines.md       ← Gatti et al. 2026 and other comparators
   phase1_results.md  ← Phase 1 outcomes carried forward
   size_estimation.md ← D-scale proxy, deposit area, SeNorge fusion
   open_questions.md  ← the 3 key scientific questions + sub-questions

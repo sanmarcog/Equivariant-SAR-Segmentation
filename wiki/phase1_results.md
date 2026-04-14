@@ -34,7 +34,7 @@
 
 ## Known limitations Phase 2 must address
 
-- AUC/patch hit-rate metrics are not comparable to Gattimgatti's polygon F1/F2
+- AUC/patch hit-rate metrics are not comparable to Gatti et al.'s pixel-level F1/F2
 - No pixel-level output — cannot evaluate deposit geometry
 - Logit collapse (T≈50) degrades calibration
 - Single seed — no variance estimates
