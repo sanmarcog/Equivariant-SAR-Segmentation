@@ -3,7 +3,7 @@ __pycache__/
 *.pyo
 .venv/
 venv/
-data/
+/data/
 checkpoints/
 logs/
 *.log
@@ -13,3 +13,4 @@ dist/
 build/
 .ipynb_checkpoints/
 wandb/
+results/
