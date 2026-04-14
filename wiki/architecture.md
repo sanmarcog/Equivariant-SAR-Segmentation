@@ -8,10 +8,13 @@
 
 - Shared-weight D4-equivariant encoder applied to post and pre patches separately
 - Change feature: `GroupPooling(feat_post − feat_pre)` → global avg pool → [B, 256]
-- ~391K parameters total
-- Phase 1 checkpoint: best AUC=0.912 at 50% data fraction (Tromsø OOD)
+- ~391K parameters total (parameter count may change slightly with new input channels)
+- Phase 1 checkpoint: best AUC=0.912 at 50% data fraction (Tromsø OOD) — **not reused**
 
-> ⚠ OPEN: freeze backbone vs fine-tune end-to-end. Freezing is safer given single training scene for Tromsø; fine-tuning risks catastrophic forgetting. Decision deferred to ablation.
+> ✓ DECIDED: retrain backbone from scratch with Phase 2 input channels (12 channels vs Phase 1's 5/7).
+> The Phase 1 checkpoint is incompatible with the new channel layout. Retraining is the clean solution;
+> the task also changes (segmentation vs classification) so Phase 1 weights are not a strong prior anyway.
+> Phase 1 checkpoint kept as reference only.
 
 ---
 

@@ -72,9 +72,8 @@ All SAR channels (VH, VV) LIA-normalized before log-ratio and ratio computation.
 > ⚠ OPEN: final channel count is 12. Norm stats from Phase 1 (7 channels) are invalid —
 > new norm stats must be computed on train split before any training run.
 
-> ⚠ OPEN: D4-BT backbone was trained on 5-channel input. Adding channels requires either
-> (a) fine-tuning the full backbone from scratch or (b) adding a learned projection layer
-> before the frozen backbone. Decision deferred to ablation.
+> ✓ DECIDED: backbone will be retrained from scratch with 12-channel input. Phase 1 checkpoint
+> is not reused. New norm stats must be computed on train split before any training run.
 
 ---
 
