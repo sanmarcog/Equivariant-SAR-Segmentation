@@ -13,3 +13,4 @@ One line per page. Read this first in every session.
 | [size_estimation.md](size_estimation.md) | D-scale proxy, deposit area pipeline, SeNorge fusion experiment |
 | [open_questions.md](open_questions.md) | The 3 key scientific questions + unresolved sub-questions |
 | [out_of_scope.md](out_of_scope.md) | What is explicitly NOT in Phase 2 |
+| [figures_plan.md](figures_plan.md) | Planned figures for paper/README — tracked across sessions |
