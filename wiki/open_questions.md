@@ -97,12 +97,20 @@ Overall F2=0.79 vs Gatti's 0.84. Gap is 5pp with 4× fewer params. Parameter eff
 
 The story is now: equivariant CNNs are parameter-efficient for SAR avalanche segmentation (positive claim) + small deposits remain below the effective detection floor at 64×64/10m even with targeted regularization (honest limitation with diagnostic evidence). The permutation test, per-D-scale ablation, and D2 visualization support this framing.
 
-### Remaining diagnostics
+### Key diagnostic findings (2026-04-15)
 
-- Augmentation branch: likely helps overall F2 (0.79→0.82–0.84), probably won't fix D2. Worth running.
-- Patch size 128: could help D2 via more terrain context. Worth investigating if viz shows "blob near D3" pattern.
-- Cond 4 vs cond 5: tells us if copy-paste augmentation contributed anything.
-- Viz on D2 polygons: pending — determines whether 128×128 is worth trying.
+**Copy-paste hurts.** Cond 4 (no copy-paste) F2=0.797 > cond 5 (copy-paste) F2=0.782. Blend-boundary artifacts likely cause. Drop copy-paste from final system.
+
+**D2 is a confidence problem, not localization.** Viz shows the model puts probability mass on D2 deposits (correct location) but at low confidence (0.1–0.3), thresholded away when optimizing overall F2. The signal exists at 64×64 — the model can't distinguish it from noise confidently enough. 128×128 patch size dropped from priority (won't fix a calibration issue).
+
+**TTA is redundant on D4-equivariant model.** The 4 TTA variants (identity, h-flip, v-flip, both-flips) are all D4 group elements. Model produces identical logits for each. Remove TTA, cut eval time 4×. Paper framing: "equivariance eliminates TTA" alongside "eliminates 4/6 geometric augmentations."
+
+### Remaining experiments (priority order)
+
+1. Off-D4 augmentation (affine + radiometric) — most likely to close 0.79→0.84 gap
+2. BCE pos_weight=3 variant — test if simpler loss beats Focal+Tversky
+3. Capacity bump to 1.11M if augmentation alone insufficient
+4. Combined (augmentation + best loss + optional capacity) — after ablation completes
 
 ---
 
