@@ -286,6 +286,7 @@ def train(
     num_workers: int    = 4,
     use_wandb:  bool    = False,
     run_name:   str | None = None,
+    pos_weight: float   = 3.0,
 ) -> dict:
     """
     Train one model (one ablation condition + one seed).
@@ -312,6 +313,7 @@ def train(
     criterion = CombinedLoss(
         gamma=gamma, alpha=alpha, beta=beta,
         mode=cfg["mode"],
+        pos_weight=pos_weight,
     ).to(device)
 
     # ── Copy-paste augmentation ────────────────────────────────────────
@@ -497,6 +499,8 @@ def _parse_args() -> argparse.Namespace:
     p.add_argument("--alpha",      default=0.3,    type=float)
     p.add_argument("--beta",       default=0.7,    type=float)
     p.add_argument("--pos-frac",   default=0.5,    type=float)
+    p.add_argument("--pos-weight", default=3.0,    type=float,
+                   help="BCE pos_weight (only used when cfg mode == 'bce')")
     p.add_argument("--epochs",     default=110,    type=int)
     p.add_argument("--batch-size", default=32,     type=int)
     p.add_argument("--lr",         default=1e-4,   type=float)
@@ -543,4 +547,5 @@ if __name__ == "__main__":
             warmup_epochs=args.warmup_epochs,
             num_workers=args.num_workers,
             use_wandb=args.use_wandb,
+            pos_weight=args.pos_weight,
         )

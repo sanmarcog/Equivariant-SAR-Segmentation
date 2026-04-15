@@ -147,18 +147,20 @@ class SegLoss(nn.Module):
 
     def __init__(
         self,
-        gamma: float = 2.0,
-        alpha: float = 0.3,
-        beta:  float = 0.7,
-        eps:   float = 0.05,
-        mode:  str   = "focal_tversky",
+        gamma:      float = 2.0,
+        alpha:      float = 0.3,
+        beta:       float = 0.7,
+        eps:        float = 0.05,
+        mode:       str   = "focal_tversky",
+        pos_weight: float = 3.0,
     ) -> None:
         super().__init__()
-        self.gamma = gamma
-        self.alpha = alpha
-        self.beta  = beta
-        self.eps   = eps
-        self.mode  = mode
+        self.gamma      = gamma
+        self.alpha      = alpha
+        self.beta       = beta
+        self.eps        = eps
+        self.mode       = mode
+        self.pos_weight = pos_weight
 
     def forward(
         self,
@@ -168,7 +170,7 @@ class SegLoss(nn.Module):
         target_smooth = smooth_labels(target, self.eps)
 
         if self.mode == "bce":
-            return bce_loss(logit, target_smooth)
+            return bce_loss(logit, target_smooth, pos_weight=self.pos_weight)
 
         fl = focal_loss(logit, target_smooth, gamma=self.gamma)
         tl = tversky_loss(logit, target_smooth, alpha=self.alpha, beta=self.beta)
@@ -234,9 +236,12 @@ class CombinedLoss(nn.Module):
         eps:         float = 0.05,
         mode:        str   = "focal_tversky",
         lambda_area: float = 0.1,
+        pos_weight:  float = 3.0,
     ) -> None:
         super().__init__()
-        self.seg_loss  = SegLoss(gamma=gamma, alpha=alpha, beta=beta, eps=eps, mode=mode)
+        self.seg_loss  = SegLoss(
+            gamma=gamma, alpha=alpha, beta=beta, eps=eps, mode=mode, pos_weight=pos_weight,
+        )
         self.area_loss = AreaLoss()
         self.lambda_area = lambda_area
 

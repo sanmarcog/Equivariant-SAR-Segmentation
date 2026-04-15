@@ -579,6 +579,7 @@ def _evaluate_checkpoint(
     iou_thresh: float = 0.1,
     n_bootstrap: int = 10_000,
     n_perm:     int  = 10_000,
+    morph_closing: bool = False,
 ) -> dict:
     import json
     import torch
@@ -622,6 +623,30 @@ def _evaluate_checkpoint(
         all_gt_flat.append(gt_mask.ravel().astype(np.float32))
 
         scene_out: dict = {"pixel": pixel_metrics}
+
+        # Optional morphological closing on F1- and F2-thresholded binary masks
+        # (matches Gatti et al. 2026 inference: kernel=3, iterations=1)
+        if morph_closing:
+            from scipy.ndimage import binary_closing
+            struct = np.ones((3, 3), dtype=bool)
+            for tag, thr_key in [("f1", "thr_f1"), ("f2", "thr_f2")]:
+                thr = pixel_metrics[thr_key]
+                binary = (prob_map >= thr).astype(np.uint8)
+                closed = binary_closing(binary, structure=struct, iterations=1).astype(np.float32)
+                gt_f = gt_mask.astype(np.float32)
+                tp = float((closed * gt_f).sum())
+                fp = float((closed * (1 - gt_f)).sum())
+                fn = float(((1 - closed) * gt_f).sum())
+                prec = tp / (tp + fp + 1e-10)
+                rec  = tp / (tp + fn + 1e-10)
+                if tag == "f1":
+                    f = 2 * prec * rec / (prec + rec + 1e-10)
+                else:
+                    f = 5 * prec * rec / (4 * prec + rec + 1e-10)
+                scene_out[f"pixel_morph_{tag}"] = {
+                    "precision": prec, "recall": rec,
+                    f"f{tag[-1]}": float(f), "thr": float(thr),
+                }
 
         # Supplementary for Tromsø test scene
         if is_test and gt_gdf is not None:
@@ -710,6 +735,8 @@ def main() -> None:
     p.add_argument("--iou-thresh", default=0.1,   type=float)
     p.add_argument("--n-bootstrap",default=10000, type=int)
     p.add_argument("--n-perm",     default=10000, type=int)
+    p.add_argument("--morph-closing", action="store_true",
+                   help="Apply binary_closing(3x3, iter=1) at F1/F2 thresholds (Gatti-style postproc)")
     args = p.parse_args()
 
     _evaluate_checkpoint(
@@ -722,6 +749,7 @@ def main() -> None:
         iou_thresh=args.iou_thresh,
         n_bootstrap=args.n_bootstrap,
         n_perm=args.n_perm,
+        morph_closing=args.morph_closing,
     )
 
 
