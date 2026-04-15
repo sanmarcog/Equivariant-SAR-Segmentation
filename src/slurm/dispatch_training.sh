@@ -107,8 +107,8 @@ for CONDITION in 1 2 3 4 5; do
                 --stats    $STATS \
                 --split    test \
                 --out      $EVAL_OUT \
-                --n-bootstrap 10000 \
-                --n-perm      10000
+                --n-bootstrap 1000 \
+                --n-perm      1000
         "
 
         echo "Done: cond=$CONDITION seed=$SEED -> $EVAL_OUT"
