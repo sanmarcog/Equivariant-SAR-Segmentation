@@ -11,7 +11,7 @@
 
 set -euo pipefail
 
-REPO=/gscratch/scrubbed/sanmarco/equivariant-sar-seg
+REPO=/mmfs1/gscratch/scrubbed/sanmarco/equivariant-sar-seg
 GRID_RESULTS=$REPO/checkpoints/grid/cond5/grid_results.json
 
 # ── Read best hparams from grid results ──────────────────────────────────────
@@ -83,8 +83,8 @@ AGG_JOB_ID=$(
     sbatch --parsable \
         --dependency=afterok:$ALL_EVAL_IDS \
         --job-name=sar-aggregate \
-        --account=stf \
-        --partition=cpu-g2 \
+        --account=demo \
+        --partition=ckpt \
         --nodes=1 \
         --ntasks-per-node=1 \
         --cpus-per-task=2 \
@@ -93,8 +93,8 @@ AGG_JOB_ID=$(
         --output="$REPO/logs/aggregate_%j.out" \
         --error="$REPO/logs/aggregate_%j.err" \
         --wrap="
-            apptainer exec \
-                /gscratch/scrubbed/sanmarco/pytorch_24.12-py3.sif \
+            apptainer exec --bind /mmfs1 \
+                /mmfs1/gscratch/scrubbed/sanmarco/pytorch_24.12-py3.sif \
                 bash -c '
                     source $REPO/.venv/bin/activate
                     cd $REPO

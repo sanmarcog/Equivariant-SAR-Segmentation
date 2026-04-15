@@ -1,7 +1,7 @@
 #!/bin/bash
 #SBATCH --job-name=sar-norm-stats
-#SBATCH --account=stf
-#SBATCH --partition=gpu-a40
+#SBATCH --account=demo
+#SBATCH --partition=ckpt
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=8
@@ -20,14 +20,14 @@
 #   sbatch src/slurm/norm_stats.slurm
 
 set -euo pipefail
-REPO=/gscratch/scrubbed/sanmarco/equivariant-sar-seg
-DATA_DIR=/gscratch/scrubbed/sanmarco/avalcd/raw
+REPO=/mmfs1/gscratch/scrubbed/sanmarco/equivariant-sar-seg
+DATA_DIR=/mmfs1/gscratch/scrubbed/sanmarco/equivariant-sar/data/raw
 STATS_OUT=$REPO/data/norm_stats_12ch.json
 
 mkdir -p "$REPO/logs" "$REPO/data"
 
-apptainer exec --nv \
-    /gscratch/scrubbed/sanmarco/pytorch_24.12-py3.sif \
+apptainer exec --nv --bind /mmfs1 \
+    /mmfs1/gscratch/scrubbed/sanmarco/pytorch_24.12-py3.sif \
     bash -c "
         source $REPO/.venv/bin/activate
         cd $REPO

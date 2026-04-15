@@ -1,7 +1,7 @@
 #!/bin/bash
 #SBATCH --job-name=sar-seg-train
-#SBATCH --account=stf
-#SBATCH --partition=gpu-a40
+#SBATCH --account=demo
+#SBATCH --partition=ckpt
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=8
@@ -35,8 +35,8 @@ BETA=${BETA:-0.7}
 POS_FRAC=${POS_FRAC:-0.5}
 EPOCHS=${EPOCHS:-110}
 
-REPO=/gscratch/scrubbed/sanmarco/equivariant-sar-seg
-DATA_DIR=/gscratch/scrubbed/sanmarco/avalcd/raw
+REPO=/mmfs1/gscratch/scrubbed/sanmarco/equivariant-sar-seg
+DATA_DIR=/mmfs1/gscratch/scrubbed/sanmarco/equivariant-sar/data/raw
 STATS=$REPO/data/norm_stats_12ch.json
 OUT_DIR=$REPO/checkpoints/cond${CONDITION}
 
@@ -44,8 +44,8 @@ mkdir -p "$REPO/logs" "$OUT_DIR"
 
 echo "Training: condition=$CONDITION seed=$SEED gamma=$GAMMA alpha=$ALPHA beta=$BETA pos_frac=$POS_FRAC"
 
-apptainer exec --nv \
-    /gscratch/scrubbed/sanmarco/pytorch_24.12-py3.sif \
+apptainer exec --nv --bind /mmfs1 \
+    /mmfs1/gscratch/scrubbed/sanmarco/pytorch_24.12-py3.sif \
     bash -c "
         source $REPO/.venv/bin/activate
         cd $REPO

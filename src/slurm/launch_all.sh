@@ -23,7 +23,7 @@
 
 set -euo pipefail
 
-REPO=/gscratch/scrubbed/sanmarco/equivariant-sar-seg
+REPO=/mmfs1/gscratch/scrubbed/sanmarco/equivariant-sar-seg
 SKIP_NORM=${SKIP_NORM:-0}
 SKIP_GRID=${SKIP_GRID:-0}
 
@@ -59,8 +59,8 @@ DISPATCH_JOB=$(
     sbatch --parsable \
         $GRID_DEP \
         --job-name=sar-dispatch \
-        --account=stf \
-        --partition=cpu-g2 \
+        --account=demo \
+        --partition=ckpt \
         --nodes=1 \
         --ntasks-per-node=1 \
         --cpus-per-task=2 \

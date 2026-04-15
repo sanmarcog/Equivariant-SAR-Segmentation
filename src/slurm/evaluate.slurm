@@ -1,7 +1,7 @@
 #!/bin/bash
 #SBATCH --job-name=sar-eval
-#SBATCH --account=stf
-#SBATCH --partition=gpu-a40
+#SBATCH --account=demo
+#SBATCH --partition=ckpt
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=4
@@ -19,16 +19,16 @@
 : "${SEED:?SEED env var required}"
 SPLIT=${SPLIT:-test}
 
-REPO=/gscratch/scrubbed/sanmarco/equivariant-sar-seg
-DATA_DIR=/gscratch/scrubbed/sanmarco/avalcd/raw
+REPO=/mmfs1/gscratch/scrubbed/sanmarco/equivariant-sar-seg
+DATA_DIR=/mmfs1/gscratch/scrubbed/sanmarco/equivariant-sar/data/raw
 STATS=$REPO/data/norm_stats_12ch.json
 CKPT=$REPO/checkpoints/cond${CONDITION}/best_cond${CONDITION}_seed${SEED}.pt
 OUT=$REPO/results/eval_cond${CONDITION}_seed${SEED}_${SPLIT}.json
 
 mkdir -p "$REPO/logs" "$REPO/results"
 
-apptainer exec --nv \
-    /gscratch/scrubbed/sanmarco/pytorch_24.12-py3.sif \
+apptainer exec --nv --bind /mmfs1 \
+    /mmfs1/gscratch/scrubbed/sanmarco/pytorch_24.12-py3.sif \
     bash -c "
         source $REPO/.venv/bin/activate
         cd $REPO

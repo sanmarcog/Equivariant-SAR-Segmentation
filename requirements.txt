@@ -10,12 +10,13 @@
 # Equivariance
 pymanopt
 py3nj
-lie-learn==0.0.2
+lie-learn==0.0.2   # 0.0.2 (July 2024) is numpy 2.x compatible
 escnn>=0.1.9
 
 # ML / data stack
-numpy<2
-torch>=2.0
+# NOTE: torch and numpy are provided by the container on Hyak —
+#       do NOT list them here or pip will downgrade to CPU-only wheels.
+#       For local installs, install torch separately before pip install -r requirements.txt.
 wandb>=0.17
 scikit-learn>=1.3
 scikit-image>=0.21
