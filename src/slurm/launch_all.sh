@@ -5,12 +5,10 @@
 # Run from the Hyak login node after syncing the repo.
 #
 # Pipeline:
-#   1. norm_stats      (CPU, ~30 min)
-#   2. grid_search     (GPU, ~8 hr)   — depends on 1
-#   3. dispatch        (CPU, ~5 min)  — depends on 2; reads grid results, submits:
-#       3a. 15 training jobs          — conds 1-5 × seeds 0-2
-#       3b. 15 eval jobs              — each depends on its paired training job
-#       3c.  1 aggregate job          — depends on all 15 eval jobs
+#   1. norm_stats  (CPU, ~30 min)
+#   2. grid_search (GPU, ~8 hr)  — depends on 1
+#   3. sequential  (GPU, ~48 hr) — depends on 2; runs all 15 train + 15 eval +
+#                                  aggregate back-to-back in one job (MaxJobs=1 limit)
 #
 # Usage:
 #   bash src/slurm/launch_all.sh
@@ -54,25 +52,15 @@ else
     GRID_DEP="--dependency=afterok:$GRID_JOB"
 fi
 
-# ── Step 3: dispatch (reads grid results, submits training + eval + aggregate) ──
-DISPATCH_JOB=$(
+# ── Step 3: sequential job (train all 15 + eval all 15 + aggregate) ───────────
+SEQ_JOB=$(
     sbatch --parsable \
         $GRID_DEP \
-        --job-name=sar-dispatch \
-        --account=demo \
-        --partition=ckpt \
-        --nodes=1 \
-        --ntasks-per-node=1 \
-        --cpus-per-task=2 \
-        --mem=4G \
-        --time=0:15:00 \
-        --output="$REPO/logs/dispatch_%j.out" \
-        --error="$REPO/logs/dispatch_%j.err" \
-        --wrap="bash $REPO/src/slurm/dispatch_training.sh"
+        "$REPO/src/slurm/dispatch_training.sh"
 )
-echo "[3/3] dispatch submitted → job $DISPATCH_JOB ${GRID_DEP:+(after $GRID_JOB)}"
+echo "[3/3] sequential job submitted → job $SEQ_JOB ${GRID_DEP:+(after $GRID_JOB)}"
 
 echo ""
 echo "Full pipeline queued. Monitor with:"
 echo "  squeue -u sanmarco"
-echo "  tail -f $REPO/logs/dispatch_${DISPATCH_JOB}.out"
+echo "  tail -f $REPO/logs/seq_${SEQ_JOB}.out"
