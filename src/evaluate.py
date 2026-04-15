@@ -239,6 +239,104 @@ def dscale_pixel_f2(
 
 
 # ---------------------------------------------------------------------------
+# Multi-threshold per-D-scale precision / recall / F2 and confidence histograms
+#
+# Diagnostic: separates "model can't find D2" (low recall at every threshold)
+# from "model finds D2 but floods scene" (low precision at every threshold)
+# from "model finds D2 but below F2-opt threshold" (recall rises at low thr).
+# ---------------------------------------------------------------------------
+
+def dscale_multi_threshold(
+    prob_map:   np.ndarray,
+    poly_masks: list[dict],
+    thresholds: list[float],
+) -> dict[int, list[dict]]:
+    """
+    For each D-scale and each threshold, compute precision/recall/F1/F2.
+
+    Returns:
+        {d: [ {threshold, precision, recall, f1, f2, tp, fp, fn}, ... ]}
+    """
+    by_dscale: dict[int, list[np.ndarray]] = {}
+    for pm in poly_masks:
+        by_dscale.setdefault(pm["size"], []).append(pm["mask"])
+
+    results: dict[int, list[dict]] = {}
+    for d in [1, 2, 3, 4]:
+        if d not in by_dscale or not by_dscale[d]:
+            results[d] = []
+            continue
+        gt_d = np.zeros_like(prob_map, dtype=bool)
+        for m in by_dscale[d]:
+            gt_d |= m
+
+        rows = []
+        for thr in thresholds:
+            pred = prob_map >= thr
+            tp = int((pred & gt_d).sum())
+            fp = int((pred & ~gt_d).sum())
+            fn = int((~pred & gt_d).sum())
+            prec = tp / (tp + fp + 1e-10)
+            rec  = tp / (tp + fn + 1e-10)
+            f1   = _f_beta(prec, rec, beta=1.0)
+            f2   = _f_beta(prec, rec, beta=2.0)
+            rows.append({
+                "threshold": float(thr),
+                "precision": float(prec),
+                "recall":    float(rec),
+                "f1":        float(f1),
+                "f2":        float(f2),
+                "tp":        tp, "fp": fp, "fn": fn,
+            })
+        results[d] = rows
+    return results
+
+
+def dscale_confidence_histogram(
+    prob_map:   np.ndarray,
+    poly_masks: list[dict],
+    bin_edges:  np.ndarray | None = None,
+) -> dict[int, dict]:
+    """
+    For each D-scale, compute histogram of predicted probabilities over pixels
+    that fall inside that D-scale's polygons.
+
+    Directly shows the confidence distribution on true-positive pixels. If D2
+    has mode at 0.7, we have a threshold/operating-point problem. If mode is
+    at 0.05, the signal genuinely isn't being learned.
+    """
+    if bin_edges is None:
+        bin_edges = np.linspace(0.0, 1.0, 21)   # 20 bins of width 0.05
+
+    by_dscale: dict[int, list[np.ndarray]] = {}
+    for pm in poly_masks:
+        by_dscale.setdefault(pm["size"], []).append(pm["mask"])
+
+    out: dict[int, dict] = {}
+    for d in [1, 2, 3, 4]:
+        if d not in by_dscale or not by_dscale[d]:
+            out[d] = {"n_pixels": 0, "bin_edges": bin_edges.tolist(), "counts": []}
+            continue
+        gt_d = np.zeros_like(prob_map, dtype=bool)
+        for m in by_dscale[d]:
+            gt_d |= m
+
+        probs_d = prob_map[gt_d]
+        counts, _ = np.histogram(probs_d, bins=bin_edges)
+        out[d] = {
+            "n_pixels":  int(gt_d.sum()),
+            "bin_edges": bin_edges.tolist(),
+            "counts":    counts.tolist(),
+            "prob_mean": float(probs_d.mean()) if len(probs_d) else 0.0,
+            "prob_std":  float(probs_d.std())  if len(probs_d) else 0.0,
+            "prob_p10":  float(np.percentile(probs_d, 10)) if len(probs_d) else 0.0,
+            "prob_p50":  float(np.percentile(probs_d, 50)) if len(probs_d) else 0.0,
+            "prob_p90":  float(np.percentile(probs_d, 90)) if len(probs_d) else 0.0,
+        }
+    return out
+
+
+# ---------------------------------------------------------------------------
 # Bootstrap 95% CI on per-D-scale pixel F2
 # ---------------------------------------------------------------------------
 
@@ -580,6 +678,7 @@ def _evaluate_checkpoint(
     n_bootstrap: int = 10_000,
     n_perm:     int  = 10_000,
     morph_closing: bool = False,
+    multi_threshold: bool = False,
 ) -> dict:
     import json
     import torch
@@ -682,6 +781,20 @@ def _evaluate_checkpoint(
                 prob_map, poly_masks, threshold=thr_f2, iou_thresh=iou_thresh
             )
 
+            # Multi-threshold diagnostic per D-scale (precision, recall, F1, F2)
+            if multi_threshold:
+                thrs = [0.1, 0.2, 0.3, 0.5,
+                        float(pixel_metrics["thr_f1"]),
+                        float(pixel_metrics["thr_f2"])]
+                scene_out["multi_threshold"] = {
+                    str(d): rows
+                    for d, rows in dscale_multi_threshold(prob_map, poly_masks, thrs).items()
+                }
+                scene_out["confidence_hist"] = {
+                    str(d): h for d, h in
+                    dscale_confidence_histogram(prob_map, poly_masks).items()
+                }
+
         scene_results[scene_name] = scene_out
         log.info(
             "%s: F1=%.4f (thr=%.3f)  F2=%.4f (thr=%.3f)",
@@ -737,6 +850,8 @@ def main() -> None:
     p.add_argument("--n-perm",     default=10000, type=int)
     p.add_argument("--morph-closing", action="store_true",
                    help="Apply binary_closing(3x3, iter=1) at F1/F2 thresholds (Gatti-style postproc)")
+    p.add_argument("--multi-threshold", action="store_true",
+                   help="Per-D-scale precision/recall/F2 at multiple thresholds + confidence histograms")
     args = p.parse_args()
 
     _evaluate_checkpoint(
@@ -750,6 +865,7 @@ def main() -> None:
         n_bootstrap=args.n_bootstrap,
         n_perm=args.n_perm,
         morph_closing=args.morph_closing,
+        multi_threshold=args.multi_threshold,
     )
 
 
