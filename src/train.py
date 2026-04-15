@@ -224,11 +224,19 @@ def train_epoch(
 
 @torch.no_grad()
 def validate(
-    model:  nn.Module,
-    loader: DataLoader,
-    device: torch.device,
+    model:      nn.Module,
+    loader:     DataLoader,
+    device:     torch.device,
+    max_pixels: int = 10_000_000,
 ) -> dict[str, float]:
-    """Compute pixel-level F1, F2 (threshold sweep) and AUPRC on val set."""
+    """
+    Compute pixel-level F1, F2 (threshold sweep) and AUPRC on val set.
+
+    Subsamples to max_pixels pixels for training-time metrics — full val set
+    is 131M pixels and sweep+auprc would take ~90s per epoch × 360 epochs = 9h.
+    Subsampled metrics preserve rankings for early stopping and checkpoint
+    selection. Final test eval still uses full resolution.
+    """
     model.eval()
     all_prob = []
     all_gt   = []
@@ -243,6 +251,12 @@ def validate(
 
     prob_all = torch.cat(all_prob).view(-1).numpy()
     gt_all   = torch.cat(all_gt).view(-1).numpy()
+
+    if prob_all.size > max_pixels:
+        rng = np.random.default_rng(0)
+        idx = rng.choice(prob_all.size, size=max_pixels, replace=False)
+        prob_all = prob_all[idx]
+        gt_all   = gt_all[idx]
 
     from src.evaluate import sweep_thresholds, auprc
     results = sweep_thresholds(prob_all, gt_all)

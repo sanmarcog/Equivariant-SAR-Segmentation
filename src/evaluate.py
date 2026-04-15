@@ -84,42 +84,36 @@ def sweep_thresholds(
             "best_f2", "thr_f2", "precision_f2", "recall_f2",
         ]}
 
+    # Sort by probability descending, compute cumulative TP at each rank.
+    # At rank k (1-indexed): TP = cum_tp[k-1], FP = k - TP, FN = n_pos - TP.
+    # Fully vectorized — no Python loop over thresholds.
     sort_idx    = np.argsort(-prob)
-    prob_sorted = prob[sort_idx]
+    prob_sorted = prob[sort_idx].astype(np.float32, copy=False)
     gt_sorted   = gt[sort_idx]
-    thresholds  = np.unique(prob_sorted)[::-1]
 
-    cum_tp = np.cumsum(gt_sorted)
-    cum_fp = np.cumsum(1.0 - gt_sorted)
+    cum_tp = np.cumsum(gt_sorted, dtype=np.float64)
+    positions = np.arange(1, len(prob_sorted) + 1, dtype=np.float64)
 
-    best_f1 = 0.0; thr_f1 = 0.5; pr_f1 = 0.0; rc_f1 = 0.0
-    best_f2 = 0.0; thr_f2 = 0.5; pr_f2 = 0.0; rc_f2 = 0.0
+    prec = cum_tp / positions
+    rec  = cum_tp / float(n_pos)
 
-    for thr in thresholds:
-        k  = int(np.searchsorted(-prob_sorted, -thr, side="right"))
-        if k == 0:
-            continue
-        tp   = cum_tp[k - 1]
-        fp   = cum_fp[k - 1]
-        fn   = n_pos - tp
-        prec = tp / (tp + fp + 1e-10)
-        rec  = tp / (tp + fn + 1e-10)
-        f1   = _f_beta(prec, rec, beta=1.0)
-        f2   = _f_beta(prec, rec, beta=2.0)
-        if f1 > best_f1:
-            best_f1, thr_f1, pr_f1, rc_f1 = f1, thr, prec, rec
-        if f2 > best_f2:
-            best_f2, thr_f2, pr_f2, rc_f2 = f2, thr, prec, rec
+    denom_f1 = prec + rec
+    denom_f2 = 4.0 * prec + rec
+    f1 = np.where(denom_f1 > 0, 2.0 * prec * rec / (denom_f1 + 1e-10), 0.0)
+    f2 = np.where(denom_f2 > 0, 5.0 * prec * rec / (denom_f2 + 1e-10), 0.0)
+
+    k1 = int(np.argmax(f1))
+    k2 = int(np.argmax(f2))
 
     return {
-        "best_f1":      float(best_f1),
-        "thr_f1":       float(thr_f1),
-        "precision_f1": float(pr_f1),
-        "recall_f1":    float(rc_f1),
-        "best_f2":      float(best_f2),
-        "thr_f2":       float(thr_f2),
-        "precision_f2": float(pr_f2),
-        "recall_f2":    float(rc_f2),
+        "best_f1":      float(f1[k1]),
+        "thr_f1":       float(prob_sorted[k1]),
+        "precision_f1": float(prec[k1]),
+        "recall_f1":    float(rec[k1]),
+        "best_f2":      float(f2[k2]),
+        "thr_f2":       float(prob_sorted[k2]),
+        "precision_f2": float(prec[k2]),
+        "recall_f2":    float(rec[k2]),
     }
 
 
