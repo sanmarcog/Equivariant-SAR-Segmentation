@@ -58,7 +58,7 @@ echo ""
 #   pos_frac → conds 2-5  (cond 1 uses random sampling)
 #   gamma/alpha/beta → conds 3-5  (conds 1-2 use BCE, focal params unused)
 
-for CONDITION in 1 2 3 4 5; do
+for CONDITION in 5 4 3 2 1; do   # reversed: get critical (full-system) data point first
     for SEED in 0 1 2; do
 
         if [[ $CONDITION -le 2 ]]; then
