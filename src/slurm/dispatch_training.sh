@@ -19,9 +19,14 @@
 # Can also be submitted manually:
 #   sbatch src/slurm/dispatch_training.sh
 
-set -euo pipefail
+# NOTE: -e is intentionally OMITTED so a single failed train/eval doesn't
+# nuke the remaining 14 (cond,seed) pairs. Failures are logged and counted;
+# aggregate runs over whatever results made it.
+set -uo pipefail
 
 REPO=/mmfs1/gscratch/scrubbed/sanmarco/equivariant-sar-seg
+FAIL_COUNT=0
+declare -a FAILURES
 DATA_DIR=/mmfs1/gscratch/scrubbed/sanmarco/equivariant-sar/data/raw
 STATS=$REPO/data/norm_stats_12ch.json
 SIF=/mmfs1/gscratch/scrubbed/sanmarco/pytorch_24.12-py3.sif
@@ -72,50 +77,80 @@ for CONDITION in 1 2 3 4 5; do
         echo "TRAIN  condition=$CONDITION  seed=$SEED  gamma=$GAMMA  alpha=$ALPHA  beta=$BETA  pos_frac=$POS_FRAC"
         echo "------------------------------------------------------------"
 
-        apptainer exec --nv --bind /mmfs1 "$SIF" /bin/bash -c "
-            source $REPO/.venv/bin/activate
-            cd $REPO
-            python -m src.train \
-                --data-dir  $DATA_DIR \
-                --stats     $STATS \
-                --out-dir   $OUT_DIR \
-                --condition $CONDITION \
-                --seed      $SEED \
-                --gamma     $GAMMA \
-                --alpha     $ALPHA \
-                --beta      $BETA \
-                --pos-frac  $POS_FRAC \
-                --epochs    110 \
-                --batch-size 32 \
-                --lr 1e-4 \
-                --wd 1e-4 \
-                --warmup-epochs 10 \
-                --num-workers 8 \
-                --no-wandb
-        "
+        # Idempotent: skip training if checkpoint already exists (resilient to job restart)
+        if [[ -f "$CKPT" ]]; then
+            echo "Checkpoint exists, skipping training: $CKPT"
+        else
+            apptainer exec --nv --bind /mmfs1 "$SIF" /bin/bash -c "
+                source $REPO/.venv/bin/activate
+                cd $REPO
+                python -m src.train \
+                    --data-dir  $DATA_DIR \
+                    --stats     $STATS \
+                    --out-dir   $OUT_DIR \
+                    --condition $CONDITION \
+                    --seed      $SEED \
+                    --gamma     $GAMMA \
+                    --alpha     $ALPHA \
+                    --beta      $BETA \
+                    --pos-frac  $POS_FRAC \
+                    --epochs    110 \
+                    --batch-size 32 \
+                    --lr 1e-4 \
+                    --wd 1e-4 \
+                    --warmup-epochs 10 \
+                    --num-workers 8 \
+                    --no-wandb
+            "
+            TRAIN_RC=$?
+            if [[ $TRAIN_RC -ne 0 ]]; then
+                echo "TRAIN FAILED (rc=$TRAIN_RC) cond=$CONDITION seed=$SEED — skipping eval"
+                FAIL_COUNT=$((FAIL_COUNT + 1))
+                FAILURES+=("train cond=$CONDITION seed=$SEED rc=$TRAIN_RC")
+                continue
+            fi
+        fi
 
         echo "------------------------------------------------------------"
         echo "EVAL   condition=$CONDITION  seed=$SEED"
         echo "------------------------------------------------------------"
 
-        apptainer exec --nv --bind /mmfs1 "$SIF" /bin/bash -c "
-            source $REPO/.venv/bin/activate
-            cd $REPO
-            python -m src.evaluate \
-                --ckpt     $CKPT \
-                --data-dir $DATA_DIR \
-                --stats    $STATS \
-                --split    test \
-                --out      $EVAL_OUT \
-                --n-bootstrap 1000 \
-                --n-perm      1000
-        "
+        if [[ -f "$EVAL_OUT" ]]; then
+            echo "Eval output exists, skipping: $EVAL_OUT"
+        else
+            apptainer exec --nv --bind /mmfs1 "$SIF" /bin/bash -c "
+                source $REPO/.venv/bin/activate
+                cd $REPO
+                python -m src.evaluate \
+                    --ckpt     $CKPT \
+                    --data-dir $DATA_DIR \
+                    --stats    $STATS \
+                    --split    test \
+                    --out      $EVAL_OUT \
+                    --n-bootstrap 1000 \
+                    --n-perm      1000
+            "
+            EVAL_RC=$?
+            if [[ $EVAL_RC -ne 0 ]]; then
+                echo "EVAL FAILED (rc=$EVAL_RC) cond=$CONDITION seed=$SEED"
+                FAIL_COUNT=$((FAIL_COUNT + 1))
+                FAILURES+=("eval cond=$CONDITION seed=$SEED rc=$EVAL_RC")
+                continue
+            fi
+        fi
 
         echo "Done: cond=$CONDITION seed=$SEED -> $EVAL_OUT"
         echo ""
 
     done
 done
+
+if [[ $FAIL_COUNT -gt 0 ]]; then
+    echo "============================================================"
+    echo "WARNING: $FAIL_COUNT failures during pipeline:"
+    for f in "${FAILURES[@]}"; do echo "  - $f"; done
+    echo "============================================================"
+fi
 
 # ── Aggregate → ablation tables ───────────────────────────────────────────────
 echo "============================================================"
