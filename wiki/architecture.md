@@ -108,9 +108,23 @@ L = L_seg + λ_area × L_area
 with extra weight on D1/D2-sized deposits. Prevents model from ignoring rare small deposits.
 Remaining 50% sampled randomly (maintains background representation).
 
-**Copy-paste augmentation**: paste D2/D1 deposit patches onto background regions within
-the same region only (Livigno→Livigno, Nuuk→Nuuk, Pish→Pish — no cross-region pasting).
-Apply Gaussian edge blending at paste boundary. Cap at 20–30% of positive patches per batch.
+**Online augmentation** (applied per-sample during training, synchronized across pre/post/aux/mask):
+
+- Off-lattice geometric: small-angle rotation (±7°), scale (0.95–1.05), shear (±3°),
+  sub-pixel translation (±2px). All applied with bilinear interpolation on imagery,
+  nearest on mask.
+- Radiometric: Gaussian noise (σ=0.05) on SAR channels independently, intensity
+  scaling (0.97–1.03) multiplicative on SAR, Gaussian noise (σ=0.02) + scale/bias
+  perturbation on auxiliary channels.
+- NOT included: horizontal/vertical flips, 90° rotations. These are mathematically
+  redundant for D4-equivariant models — the architecture is invariant to these by
+  construction. Gatti et al. require these augmentations for their non-equivariant
+  SwinV2-Tiny; we get them for free. This is a core selling point of the equivariant
+  approach and should be documented in the paper.
+
+**Copy-paste augmentation** (condition 5 only): paste D2/D1 deposit patches onto background
+regions within the same region only (Livigno→Livigno, Nuuk→Nuuk, Pish→Pish — no cross-region).
+Gaussian edge blending at paste boundary. Cap at 20–30% of positive patches per batch.
 Monitor val precision as early warning for artifact learning.
 
 **Dropout**: 0.3 on the bottleneck ([B, 32, 4, 4]).
