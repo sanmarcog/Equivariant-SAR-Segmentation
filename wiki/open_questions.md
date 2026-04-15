@@ -70,16 +70,39 @@ Polygon contrast (mean signal − background, dB). Higher = cleaner detection.
 
 ---
 
-## Active diagnostic: val F2=0.42 vs Gatti test F2=0.84
+## Tromsø results (2026-04-15) — overall strong, D2 failed
 
-> ⚠ CRITICAL: as of 2026-04-15, the 0.42 number is val (Livigno), NOT test (Tromsø). Gatti's 0.84 is test (Tromsø). Tromsø has ~15× more deposit content per pixel (1.4% vs 0.09%), making F2 structurally easier. The Tromsø eval result — not the val number — is the real comparison. Waiting on cond 5 eval.
+### Overall pixel metrics (cond 5, seeds 0–1)
 
-Three diagnosed factors contributing to the gap:
-1. **No training-time augmentation** (FIXED — equivariance-aware augmentation branch in progress). Model memorized 3,300 positive patches by epoch 8.
-2. **Val vs test scene mismatch** (NOT a bug — just can't compare yet). Livigno val has 0.09% positive pixels; Tromsø test has 1.4%. Structurally different F2 landscape.
-3. **Threshold=0.82 signal**: model outputs near-zero probabilities everywhere, needs very high threshold to maximize F2. Suggests class imbalance undertreated. Cond 1 (BCE) in the ablation will show if loss is part of the problem.
+| Metric | Seed 0 | Seed 1 | Gatti |
+|--------|--------|--------|-------|
+| Pixel F1 | 0.748 | 0.745 | 0.806 |
+| Pixel F2 | 0.788 | 0.790 | 0.841 |
+| AUPRC | 0.811 | 0.819 | — |
 
-**Pending diagnostics**: visual decoder smoke test on Tromsø D2 patches (blurry blob vs uniform zero vs wrong location). Single-batch overfit test (loss → 0 in 200 steps confirms optimizer not broken).
+Overall F2=0.79 vs Gatti's 0.84. Gap is 5pp with 4× fewer params. Parameter efficiency claim is intact.
+
+### Per-D-scale (cond 5, seed 0)
+
+| D-scale | n | F2 | 95% CI | Permutation p |
+|---------|---|-----|--------|---------------|
+| D1 | 5 | 0.001 | [0, 0.001] | — |
+| D2 | 25 | 0.064 | [0.029, 0.054] | 1.0000 |
+| D3 | 71 | 0.579 | [0.408, 0.501] | — |
+| D4 | 16 | 0.654 | [0.440, 0.606] | — |
+
+> ✓ DECIDED: D2 detection has failed (F2=0.06, permutation p=1.0). Model has zero D2-specific capability — D2 detections are spillover from nearby D3+ deposits. D2 as co-primary goal is dropped. Reframed as structured failure analysis in the paper.
+
+### Paper reframe
+
+The story is now: equivariant CNNs are parameter-efficient for SAR avalanche segmentation (positive claim) + small deposits remain below the effective detection floor at 64×64/10m even with targeted regularization (honest limitation with diagnostic evidence). The permutation test, per-D-scale ablation, and D2 visualization support this framing.
+
+### Remaining diagnostics
+
+- Augmentation branch: likely helps overall F2 (0.79→0.82–0.84), probably won't fix D2. Worth running.
+- Patch size 128: could help D2 via more terrain context. Worth investigating if viz shows "blob near D3" pattern.
+- Cond 4 vs cond 5: tells us if copy-paste augmentation contributed anything.
+- Viz on D2 polygons: pending — determines whether 128×128 is worth trying.
 
 ---
 

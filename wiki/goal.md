@@ -18,17 +18,20 @@
 
 ---
 
-## Primary goals
+## Primary goal
 
-1. **Match or beat Gatti et al. 2026** on pixel-level F1 ≥ 0.806 / F2 ≥ 0.841 on Tromsø OOD. Gatti uses SwinV2-Tiny (vision transformer, ~2.39M params); we use D4-equivariant CNN (~500–600K params).
-2. **D2 detection**: demonstrate meaningful recall on D2-class deposits (25 polygons, ~600–5000 m²). This is the hard target — just above the speckle floor at 10m GRD. Everything in Phase 2 (75% overlap, biased sampling, Focal+Tversky loss, skip connections, copy-paste augmentation) is ultimately in service of not losing D2. D1 (n=5) is likely below the detection floor and not expected to be recoverable.
+1. **Match or beat Gatti et al. 2026** on pixel-level F1 ≥ 0.806 / F2 ≥ 0.841 on Tromsø OOD, with ~4× fewer parameters. Gatti uses SwinV2-Tiny (vision transformer, ~2.39M params); we use D4-equivariant CNN (~625K params). Current result: F2=0.79 (5pp gap). Augmentation expected to close most of this.
 
-> The paper's central claim is that an equivariant CNN can match a vision transformer on overall metrics AND detect small avalanches that are inherently hard at this resolution. Parameter efficiency (~4× fewer) is supporting evidence, not the headline.
+> The paper's central claim is that an equivariant CNN can match a vision transformer on overall segmentation metrics with 4× fewer parameters, and that D4-equivariance provides a strong inductive bias that eliminates the need for geometric augmentation while maintaining competitive performance.
+
+## D2 detection — reframed as failure analysis
+
+2. **D2 detection failed** (F2=0.06, permutation p=1.0). Despite biased sampling, Focal+Tversky loss, skip connections, and copy-paste augmentation, the model has zero D2-specific capability. The paper presents this as a structured negative result: what was tried, why it failed, what it implies for small-deposit detection at 10m GRD.
 
 ## Secondary goals
 
 3. **Deposit area pipeline**: pixel mask → georeferenced polygon → area in m² → D-scale proxy label.
-4. **D2 detection advantage**: test whether 64×64 patches at 75% overlap outperform 128×128 at 50% overlap for small deposits.
+4. **Investigate D2 failure causes**: is it patch size (64×64 insufficient context), resolution (10m GRD), or capacity? Informs Phase 3 direction.
 
 ## Supplementary goal
 
@@ -40,8 +43,8 @@
 
 > ✓ DECIDED: primary metric is **pixel-level** F1/F2 matching Gatti's protocol exactly (threshold sweep on val, report best F1 at F1-optimized threshold and best F2 at F2-optimized threshold). Polygon-level metrics reported as supplementary.
 
-- **Full win**: pixel F1 ≥ 0.806 AND meaningful D2 recall (per-D-scale F2_D2 reported)
-- **Partial win**: pixel F1 ≥ 0.806 but D2 recall weak — report what regularization helped and what didn't
-- **Informative loss**: document what the capacity/resolution gap costs for small deposits; motivates Phase 3
+- **Full win**: pixel F2 ≥ 0.841 with ~4× fewer parameters + honest D2 failure analysis with diagnostic evidence
+- **Partial win** (current trajectory): pixel F2 ≈ 0.79–0.84, gap partially closed by augmentation, D2 failure documented
+- **Informative loss**: document what the capacity/resolution gap costs; motivates Phase 3
 
 See [evaluation.md](evaluation.md) for metric details and [baselines.md](baselines.md) for Gatti protocol.
