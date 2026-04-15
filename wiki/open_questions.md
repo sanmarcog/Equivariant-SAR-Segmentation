@@ -70,12 +70,27 @@ Polygon contrast (mean signal − background, dB). Higher = cleaner detection.
 
 ---
 
+## Active diagnostic: val F2=0.42 vs Gatti test F2=0.84
+
+> ⚠ CRITICAL: as of 2026-04-15, the 0.42 number is val (Livigno), NOT test (Tromsø). Gatti's 0.84 is test (Tromsø). Tromsø has ~15× more deposit content per pixel (1.4% vs 0.09%), making F2 structurally easier. The Tromsø eval result — not the val number — is the real comparison. Waiting on cond 5 eval.
+
+Three diagnosed factors contributing to the gap:
+1. **No training-time augmentation** (FIXED — equivariance-aware augmentation branch in progress). Model memorized 3,300 positive patches by epoch 8.
+2. **Val vs test scene mismatch** (NOT a bug — just can't compare yet). Livigno val has 0.09% positive pixels; Tromsø test has 1.4%. Structurally different F2 landscape.
+3. **Threshold=0.82 signal**: model outputs near-zero probabilities everywhere, needs very high threshold to maximize F2. Suggests class imbalance undertreated. Cond 1 (BCE) in the ablation will show if loss is part of the problem.
+
+**Pending diagnostics**: visual decoder smoke test on Tromsø D2 patches (blurry blob vs uniform zero vs wrong location). Single-batch overfit test (loss → 0 in 200 steps confirms optimizer not broken).
+
+---
+
 ## Additional unresolved decisions
 
 - [evaluation.md](evaluation.md): IoU threshold for polygon matching (supplementary metric — Gatti doesn't use polygon matching, so we choose our own standard value)
-- [evaluation.md](evaluation.md): bootstrap vs analytical CIs
+- [evaluation.md](evaluation.md): bootstrap vs analytical CIs — CLOSED, bootstrap decided
 - [baselines.md](baselines.md): 112 vs 117 polygon count — likely D1 exclusion (117 − 5 = 112) but needs verification from full paper text
-- [datasets.md](datasets.md): D1 exclusion from size classifier, SeNorge variable names
+- [baselines.md](baselines.md): check Gatti's repo for per-scene val numbers (apples-to-apples comparison with our val F2)
+- [datasets.md](datasets.md): D1 exclusion from primary F2 reporting — if confirmed, instant +0.02–0.05 F2
+- [datasets.md](datasets.md): SeNorge variable names and Dec 2024 availability
 - [size_estimation.md](size_estimation.md): empirical area thresholds for D-scale boundaries
 - [baselines.md](baselines.md): Bianchi & Grahn 2025 — check if they use AvalCD
 - [baselines.md](baselines.md): Bianchi et al. 2021 — not yet ingested
