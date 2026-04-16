@@ -46,6 +46,7 @@ from torch.utils.data import DataLoader
 
 from src.data.dataset import SegmentationDataset, BiasedPatchSampler, PATCH_STRIDE_TRAIN
 from src.data.augment import CopyPasteAugment
+from src.data.augment_online import OnlineAugment
 from src.losses import CombinedLoss
 from src.models.segnet import build_model, count_parameters
 
@@ -107,22 +108,31 @@ def build_loaders(
     condition:    int,
     pos_frac:     float,
     seed:         int,
-    num_workers:  int = 4,
+    num_workers:  int   = 4,
+    patch_size:   int   = 64,
+    train_stride: int | None = None,
+    val_stride:   int | None = None,
 ) -> tuple[DataLoader, DataLoader]:
     """Build train and val DataLoaders for a given ablation condition."""
     cfg = ABLATION_CONDITIONS[condition]
+    if train_stride is None:
+        train_stride = patch_size // 2
+    if val_stride is None:
+        val_stride = max(patch_size // 4, 16)
 
     train_ds = SegmentationDataset(
         data_dir=data_dir,
         split="train",
         stats_path=stats_path,
-        patch_stride=PATCH_STRIDE_TRAIN,
+        patch_stride=train_stride,
+        patch_size=patch_size,
     )
     val_ds = SegmentationDataset(
         data_dir=data_dir,
         split="val",
         stats_path=stats_path,
-        patch_stride=16,
+        patch_stride=val_stride,
+        patch_size=patch_size,
     )
 
     if cfg["biased"]:
@@ -166,27 +176,29 @@ def build_loaders(
 # ---------------------------------------------------------------------------
 
 def train_epoch(
-    model:      nn.Module,
-    loader:     DataLoader,
-    criterion:  CombinedLoss,
-    optimizer:  torch.optim.Optimizer,
-    device:     torch.device,
-    copy_paste: CopyPasteAugment | None = None,
+    model:       nn.Module,
+    loader:      DataLoader,
+    criterion:   CombinedLoss,
+    optimizer:   torch.optim.Optimizer,
+    device:      torch.device,
+    copy_paste:  CopyPasteAugment | None = None,
+    online_aug:  "OnlineAugment | None" = None,
 ) -> dict[str, float]:
     model.train()
     total_loss = total_seg = total_area = 0.0
     n_batches  = 0
 
     for batch in loader:
-        if copy_paste is not None:
-            # Apply copy-paste per batch (list of dicts)
+        if copy_paste is not None or online_aug is not None:
             samples = [
                 {k: (v[i] if isinstance(v, torch.Tensor) else v[i])
                  for k, v in batch.items()}
                 for i in range(batch["patch"].shape[0])
             ]
-            samples = copy_paste(samples)
-            # Re-stack
+            if copy_paste is not None:
+                samples = copy_paste(samples)
+            if online_aug is not None:
+                samples = [online_aug(s) for s in samples]
             batch = {
                 "patch":  torch.stack([s["patch"] for s in samples]),
                 "mask":   torch.stack([s["mask"]  for s in samples]),
@@ -287,6 +299,9 @@ def train(
     use_wandb:  bool    = False,
     run_name:   str | None = None,
     pos_weight: float   = 3.0,
+    patch_size: int     = 64,
+    train_stride: int | None = None,
+    online_aug: bool    = False,
 ) -> dict:
     """
     Train one model (one ablation condition + one seed).
@@ -302,8 +317,10 @@ def train(
 
     # ── Data ──────────────────────────────────────────────────────────
     train_loader, val_loader, train_ds = build_loaders(
-        data_dir, stats_path, batch_size, condition, pos_frac, seed, num_workers
+        data_dir, stats_path, batch_size, condition, pos_frac, seed, num_workers,
+        patch_size=patch_size, train_stride=train_stride,
     )
+    log.info("Patch size=%d, train stride=%d", patch_size, train_stride or patch_size // 2)
 
     # ── Model ─────────────────────────────────────────────────────────
     model = build_model(use_skip=cfg["use_skip"]).to(device)
@@ -320,6 +337,12 @@ def train(
     copy_paste = None
     if cfg["copy_paste"]:
         copy_paste = CopyPasteAugment(train_ds, cap_frac=0.30, sigma=4.0, rng_seed=seed)
+
+    # ── Online geometric + radiometric augmentation (equivariance-aware) ─
+    aug_online = None
+    if online_aug:
+        aug_online = OnlineAugment(rng_seed=seed)
+        log.info("Online augmentation ENABLED (off-D4-lattice: affine + Gaussian noise + intensity)")
 
     # ── Optimiser + LR schedule ────────────────────────────────────────
     optimizer = torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=wd)
@@ -358,7 +381,7 @@ def train(
     for epoch in range(1, epochs + 1):
         t0 = time.time()
         train_metrics = train_epoch(
-            model, train_loader, criterion, optimizer, device, copy_paste
+            model, train_loader, criterion, optimizer, device, copy_paste, aug_online
         )
         scheduler.step()
 
@@ -507,6 +530,12 @@ def _parse_args() -> argparse.Namespace:
     p.add_argument("--wd",         default=1e-4,   type=float)
     p.add_argument("--warmup-epochs", default=10,  type=int)
     p.add_argument("--num-workers", default=4,     type=int)
+    p.add_argument("--patch-size", default=64, type=int,
+                   help="Input patch size (64 for our Phase 2 default, 128 for Gatti-mirror)")
+    p.add_argument("--train-stride", default=None, type=int,
+                   help="Training patch stride (default: patch_size//2 = 50% overlap)")
+    p.add_argument("--online-aug", action="store_true",
+                   help="Enable off-D4 augmentation (affine + Gaussian noise + intensity)")
     p.add_argument("--wandb",       action="store_true", dest="use_wandb")
     p.add_argument("--no-wandb",    action="store_false", dest="use_wandb")
     p.add_argument("--grid-search", action="store_true")
@@ -548,4 +577,7 @@ if __name__ == "__main__":
             num_workers=args.num_workers,
             use_wandb=args.use_wandb,
             pos_weight=args.pos_weight,
+            patch_size=args.patch_size,
+            train_stride=args.train_stride,
+            online_aug=args.online_aug,
         )

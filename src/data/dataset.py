@@ -151,10 +151,12 @@ class SegmentationDataset(Dataset):
         stats_path:   str | Path,
         transform:    Callable | None = None,
         patch_stride: int | None = None,
+        patch_size:   int | None = None,
     ) -> None:
-        self.data_dir  = Path(data_dir)
-        self.split     = split
-        self.transform = transform
+        self.data_dir   = Path(data_dir)
+        self.split      = split
+        self.transform  = transform
+        self.patch_size = patch_size if patch_size is not None else PATCH_SIZE
 
         assert split in ("train", "val", "test"), f"Unknown split: {split}"
 
@@ -170,10 +172,10 @@ class SegmentationDataset(Dataset):
 
         self.scene_cache = _SceneCache(self.data_dir, scene_names, stats)
 
-        stride = patch_stride if patch_stride is not None else (
-            PATCH_STRIDE_TRAIN if split == "train" else PATCH_STRIDE_INFER
-        )
-        self.records = _build_patch_index(self.scene_cache, PATCH_SIZE, stride)
+        if patch_stride is None:
+            # default: 50% overlap at train, 75% at inference
+            patch_stride = (self.patch_size // 2) if split == "train" else (self.patch_size // 4)
+        self.records = _build_patch_index(self.scene_cache, self.patch_size, patch_stride)
         log.info(
             "Split '%s': %d patches (%d positive, %d negative)",
             split,
@@ -192,9 +194,9 @@ class SegmentationDataset(Dataset):
         arr12, mask = self.scene_cache.get(rec["scene"])
 
         i, j = rec["pos_i"], rec["pos_j"]
-        p = PATCH_SIZE
-        patch = arr12[:, i:i+p, j:j+p].copy()    # [12, 64, 64]
-        pmask = mask[i:i+p, j:j+p].copy()         # [64, 64]
+        p = self.patch_size
+        patch = arr12[:, i:i+p, j:j+p].copy()    # [12, P, P]
+        pmask = mask[i:i+p, j:j+p].copy()         # [P, P]
 
         sample = {
             "patch":  torch.from_numpy(patch),

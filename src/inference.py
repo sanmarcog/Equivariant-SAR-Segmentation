@@ -83,6 +83,8 @@ def predict_scene(
     stride:     int = 16,
     tta:        bool = True,
     batch_size: int = 64,
+    blending:   str = "mean",
+    gaussian_sigma_frac: float = 0.25,
 ) -> np.ndarray:
     """
     Run inference on a full AvalCD scene.
@@ -92,14 +94,21 @@ def predict_scene(
         scene_dir:  Path to AvalCD scene directory.
         stats:      Norm stats dict (from norm_stats_12ch.json).
         device:     Torch device.
-        patch_size: Patch side length in pixels (default 64).
-        stride:     Sliding window stride (default 16, 75% overlap).
-        tta:        If True, apply 4-fold TTA (default True).
+        patch_size: Patch side length in pixels.
+        stride:     Sliding window stride.
+        tta:        If True, apply 4-fold TTA (redundant for D4 equivariance).
         batch_size: Number of patches per forward pass.
+        blending:   How to combine overlapping tile predictions:
+                    'mean'     — average logits across tiles covering each pixel (our default)
+                    'max'      — max probability across tiles (Gatti's F2-opt best)
+                    'gaussian' — Gaussian-weighted average centered on each tile (Gatti's F1-opt best)
+        gaussian_sigma_frac: Sigma of the Gaussian kernel as fraction of patch_size
+                             (only used when blending='gaussian'; default 0.25 → σ = P/4)
 
     Returns:
         prob_map: [H, W] float32 array with predicted probabilities in [0, 1].
     """
+    assert blending in ("mean", "max", "gaussian"), f"unknown blending={blending}"
     scene_dir = Path(scene_dir)
     model.eval()
 
@@ -123,9 +132,22 @@ def predict_scene(
 
     coords = [(i, j) for i in row_starts for j in col_starts]
 
-    # ── Accumulate logit sum and count ────────────────────────────────
-    logit_sum = np.zeros((H, W), dtype=np.float64)
-    count_map = np.zeros((H, W), dtype=np.float64)
+    # ── Prepare blending accumulators ──────────────────────────────────
+    if blending == "mean":
+        logit_sum = np.zeros((H, W), dtype=np.float64)
+        count_map = np.zeros((H, W), dtype=np.float64)
+    elif blending == "max":
+        # Initialize to -inf so first write wins; operate on probability space.
+        prob_acc = np.full((H, W), -1.0, dtype=np.float32)
+    elif blending == "gaussian":
+        # Gaussian-weighted average (Gatti's F1-opt best blending)
+        sigma = max(1.0, gaussian_sigma_frac * P)
+        yy, xx = np.mgrid[0:P, 0:P].astype(np.float32)
+        cy = (P - 1) / 2.0
+        kernel = np.exp(-((yy - cy) ** 2 + (xx - cy) ** 2) / (2.0 * sigma ** 2))
+        kernel = kernel.astype(np.float64)
+        weighted_logit_sum = np.zeros((H, W), dtype=np.float64)
+        weight_sum         = np.zeros((H, W), dtype=np.float64)
 
     arr_t = torch.from_numpy(arr12)
 
@@ -133,35 +155,50 @@ def predict_scene(
     for batch_start in range(0, len(coords), batch_size):
         batch_coords = coords[batch_start : batch_start + batch_size]
         patches = [arr_t[:, i:i+P, j:j+P] for i, j in batch_coords]
-        batch_t = torch.stack(patches).to(device)   # [BS, 12, 64, 64]
+        batch_t = torch.stack(patches).to(device)   # [BS, 12, P, P]
 
         if tta:
-            # Run 4 TTA variants
             all_logits = []
             for flip_dims in [None, [-1], [-2], [-1, -2]]:
                 x = batch_t
                 if flip_dims:
                     x = torch.flip(x, dims=flip_dims)
                 out = model(x)
-                logit = out["logit"]  # [BS, 1, 64, 64]
+                logit = out["logit"]
                 if flip_dims:
                     logit = torch.flip(logit, dims=flip_dims)
                 all_logits.append(logit)
-            batch_logit = torch.stack(all_logits, dim=0).mean(dim=0)  # [BS, 1, 64, 64]
+            batch_logit = torch.stack(all_logits, dim=0).mean(dim=0)
         else:
             out = model(batch_t)
-            batch_logit = out["logit"]   # [BS, 1, 64, 64]
+            batch_logit = out["logit"]
 
-        batch_logit_np = batch_logit.squeeze(1).cpu().float().numpy()  # [BS, 64, 64]
+        batch_logit_np = batch_logit.squeeze(1).cpu().float().numpy()  # [BS, P, P]
 
         for k, (i, j) in enumerate(batch_coords):
-            logit_sum[i:i+P, j:j+P] += batch_logit_np[k]
-            count_map[i:i+P, j:j+P] += 1.0
+            tile_logit = batch_logit_np[k]
+            if blending == "mean":
+                logit_sum[i:i+P, j:j+P] += tile_logit
+                count_map[i:i+P, j:j+P] += 1.0
+            elif blending == "max":
+                tile_prob = 1.0 / (1.0 + np.exp(-tile_logit.astype(np.float32)))
+                np.maximum(prob_acc[i:i+P, j:j+P], tile_prob, out=prob_acc[i:i+P, j:j+P])
+            elif blending == "gaussian":
+                weighted_logit_sum[i:i+P, j:j+P] += tile_logit.astype(np.float64) * kernel
+                weight_sum[i:i+P, j:j+P]         += kernel
 
-    # Avoid division by zero in uncovered border pixels
-    count_map = np.maximum(count_map, 1.0)
-    avg_logit = logit_sum / count_map
-    prob_map  = 1.0 / (1.0 + np.exp(-avg_logit))   # sigmoid
+    # ── Finalize ───────────────────────────────────────────────────────
+    if blending == "mean":
+        count_map = np.maximum(count_map, 1.0)
+        avg_logit = logit_sum / count_map
+        prob_map  = 1.0 / (1.0 + np.exp(-avg_logit))
+    elif blending == "max":
+        # Border pixels never touched remain -1 → clamp to 0
+        prob_map = np.where(prob_acc < 0.0, 0.0, prob_acc)
+    elif blending == "gaussian":
+        weight_sum = np.maximum(weight_sum, 1e-10)
+        avg_logit  = weighted_logit_sum / weight_sum
+        prob_map   = 1.0 / (1.0 + np.exp(-avg_logit))
 
     return prob_map.astype(np.float32)
 

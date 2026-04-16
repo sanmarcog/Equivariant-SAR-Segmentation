@@ -795,6 +795,9 @@ def _evaluate_checkpoint(
     morph_closing: bool = False,
     multi_threshold: bool = False,
     frozen_thresholds: list[float] | None = None,
+    patch_size: int = 64,
+    stride:     int = 16,
+    blending:   str = "mean",
 ) -> dict:
     import json
     import torch
@@ -831,7 +834,10 @@ def _evaluate_checkpoint(
         scene_dir = data_dir / scene_name
         gt_mask   = load_gt_mask(scene_dir)
         meta      = load_scene_meta(scene_dir)
-        prob_map  = predict_scene(model, scene_dir, stats, device, tta=use_tta)
+        prob_map  = predict_scene(
+            model, scene_dir, stats, device,
+            patch_size=patch_size, stride=stride, tta=use_tta, blending=blending,
+        )
 
         pixel_metrics = evaluate_scene(prob_map, gt_mask)
         all_prob.append(prob_map.ravel())
@@ -901,9 +907,14 @@ def _evaluate_checkpoint(
             )
             scene_out["perm_d2"] = perm
 
-            # Polygon-level metrics
+            # Polygon-level metrics — compute at BOTH F1-opt and F2-opt thresholds
+            # so we can directly compare to Gatti's F1-opt and F2-opt configurations.
+            thr_f1 = pixel_metrics["thr_f1"]
             scene_out["polygon"] = polygon_metrics(
                 prob_map, poly_masks, threshold=thr_f2, iou_thresh=iou_thresh
+            )   # default: F2-opt (backwards compatible)
+            scene_out["polygon_at_f1opt"] = polygon_metrics(
+                prob_map, poly_masks, threshold=thr_f1, iou_thresh=iou_thresh
             )
 
             # Multi-threshold diagnostic per D-scale (precision, recall, F1, F2)
@@ -1001,6 +1012,14 @@ def main() -> None:
                    help="Per-D-scale precision/recall/F2 at multiple thresholds + confidence histograms")
     p.add_argument("--frozen-thresholds", nargs="+", type=float, default=None,
                    help="Compute overall metrics at these fixed thresholds (deployment-mode evaluation, no per-seed tuning)")
+    p.add_argument("--patch-size", default=64, type=int,
+                   help="Inference patch size (128 for Gatti-mirror)")
+    p.add_argument("--stride", default=16, type=int,
+                   help="Inference stride (default 16 = 75%% overlap at 64; use 64 for Gatti-mirror at 128)")
+    p.add_argument("--blending", default="mean",
+                   choices=["mean", "max", "gaussian"],
+                   help="Inference tile-blending strategy. 'mean' (ours default). "
+                        "'max' matches Gatti's F2-opt headline. 'gaussian' matches Gatti's F1-opt headline.")
     args = p.parse_args()
 
     _evaluate_checkpoint(
@@ -1016,6 +1035,9 @@ def main() -> None:
         morph_closing=args.morph_closing,
         multi_threshold=args.multi_threshold,
         frozen_thresholds=args.frozen_thresholds,
+        patch_size=args.patch_size,
+        stride=args.stride,
+        blending=args.blending,
     )
 
 
