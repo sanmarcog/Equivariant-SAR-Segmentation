@@ -679,6 +679,7 @@ def _evaluate_checkpoint(
     n_perm:     int  = 10_000,
     morph_closing: bool = False,
     multi_threshold: bool = False,
+    frozen_thresholds: list[float] | None = None,
 ) -> dict:
     import json
     import torch
@@ -816,6 +817,28 @@ def _evaluate_checkpoint(
     overall = sweep_thresholds(overall_prob, overall_gt)
     overall["auprc"] = auprc(overall_prob, overall_gt)
 
+    # Frozen-threshold metrics: deployment-mode honest evaluation.
+    # Sweep-on-test threshold is overoptimistic — different per-seed thresholds
+    # mask architectural threshold instability (cond 3 thr_f2 spans 0.30–0.66).
+    # Report metrics at fixed thresholds for fair cross-seed/cross-cond comparison.
+    if frozen_thresholds:
+        overall["frozen"] = {}
+        for t in frozen_thresholds:
+            pred = (overall_prob >= t)
+            tp = float((pred & (overall_gt > 0.5)).sum())
+            fp = float((pred & ~(overall_gt > 0.5)).sum())
+            fn = float((~pred & (overall_gt > 0.5)).sum())
+            prec = tp / (tp + fp + 1e-10)
+            rec  = tp / (tp + fn + 1e-10)
+            overall["frozen"][f"{t:.2f}"] = {
+                "threshold": float(t),
+                "precision": float(prec),
+                "recall":    float(rec),
+                "f1":        float(_f_beta(prec, rec, beta=1.0)),
+                "f2":        float(_f_beta(prec, rec, beta=2.0)),
+                "tp": int(tp), "fp": int(fp), "fn": int(fn),
+            }
+
     output = {
         "ckpt":          str(ckpt_path),
         "split":         split,
@@ -852,6 +875,8 @@ def main() -> None:
                    help="Apply binary_closing(3x3, iter=1) at F1/F2 thresholds (Gatti-style postproc)")
     p.add_argument("--multi-threshold", action="store_true",
                    help="Per-D-scale precision/recall/F2 at multiple thresholds + confidence histograms")
+    p.add_argument("--frozen-thresholds", nargs="+", type=float, default=None,
+                   help="Compute overall metrics at these fixed thresholds (deployment-mode evaluation, no per-seed tuning)")
     args = p.parse_args()
 
     _evaluate_checkpoint(
@@ -866,6 +891,7 @@ def main() -> None:
         n_perm=args.n_perm,
         morph_closing=args.morph_closing,
         multi_threshold=args.multi_threshold,
+        frozen_thresholds=args.frozen_thresholds,
     )
 
 

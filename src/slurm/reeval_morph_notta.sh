@@ -54,6 +54,7 @@ for COND in 1 2 3 4 5; do
                 --no-tta \
                 --morph-closing \
                 --multi-threshold \
+                --frozen-thresholds 0.3 0.5 0.7 \
                 --n-bootstrap 1000 \
                 --n-perm      1000
         "
