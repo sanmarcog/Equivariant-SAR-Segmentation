@@ -58,7 +58,12 @@ def load_seed_result(json_path: Path, split: str) -> dict:
         "best_f1": overall["best_f1"],
         "best_f2": overall["best_f2"],
         "auprc":   overall.get("auprc", float("nan")),
+        "thr_f1":  overall.get("thr_f1", float("nan")),
+        "thr_f2":  overall.get("thr_f2", float("nan")),
     }
+    # Frozen-threshold metrics (deployment-mode), if present
+    if "frozen" in overall:
+        result["frozen"] = overall["frozen"]
 
     scene_r = data.get("scene_results", {}).get(TEST_SCENE, {})
     result["dscale_f2"]   = {int(d): float(v) for d, v in scene_r.get("dscale_f2", {}).items()}
@@ -99,16 +104,42 @@ def collect_condition_results(
 
 
 def print_table_a(rows: list[dict]) -> None:
-    header = f"{'#':<2}  {'Condition':<40}  {'F1':>8}  {'±':>6}  {'F2':>8}  {'±':>6}"
-    print("\n=== Table A: Overall Pixel F1 / F2 ===")
+    header = (
+        f"{'#':<2}  {'Condition':<40}  "
+        f"{'F1 mean ± std':<16}  {'F2 mean ± std':<16}  "
+        f"{'thr_F2 mean ± std':<20}"
+    )
+    print("\n=== Table A: Overall Pixel F1 / F2 (sweep-mode) + Threshold Stability ===")
     print(header)
     print("-" * len(header))
     for r in rows:
+        f1s = f"{r['f1_mean']:.4f} ± {r['f1_std']:.4f}"
+        f2s = f"{r['f2_mean']:.4f} ± {r['f2_std']:.4f}"
+        thr_mean = r.get('thr_f2_mean', float('nan'))
+        thr_std  = r.get('thr_f2_std',  float('nan'))
+        thrs = f"{thr_mean:.3f} ± {thr_std:.3f}"
         print(
             f"{r['condition']:<2}  {r['name']:<40}  "
-            f"{r['f1_mean']:>8.4f}  {r['f1_std']:>6.4f}  "
-            f"{r['f2_mean']:>8.4f}  {r['f2_std']:>6.4f}"
+            f"{f1s:<16}  {f2s:<16}  {thrs:<20}"
         )
+
+    # Frozen-threshold sub-table (deployment-mode), if present
+    if rows and "frozen" in rows[0]:
+        thresholds = sorted(rows[0]["frozen"].keys())
+        print(f"\n=== Table A2: Frozen-Threshold (Deployment-Mode) F2 ===")
+        head = f"{'#':<2}  {'Condition':<40}"
+        for t in thresholds:
+            head += f"  {'F2@'+t:<16}"
+        print(head)
+        print("-" * len(head))
+        for r in rows:
+            line = f"{r['condition']:<2}  {r['name']:<40}"
+            for t in thresholds:
+                f = r.get("frozen", {}).get(t, {})
+                fm = f.get("f2_mean", float("nan"))
+                fs = f.get("f2_std",  float("nan"))
+                line += f"  {fm:.4f} ± {fs:.4f}"
+            print(line)
 
 
 def print_table_b(rows: list[dict]) -> None:

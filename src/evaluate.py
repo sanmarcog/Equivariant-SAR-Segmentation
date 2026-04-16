@@ -628,17 +628,40 @@ def format_ablation_tables(
     for cond in sorted(condition_results.keys()):
         seeds = condition_results[cond]
 
-        # Table A: overall F1/F2
+        # Table A: overall F1/F2 + threshold stability (mean ± std of the
+        # F2-optimal threshold across seeds — high std = deployment-fragile)
         f1_vals = [s["best_f1"] for s in seeds]
         f2_vals = [s["best_f2"] for s in seeds]
-        table_a.append({
+        thr_f1_vals = [s.get("thr_f1", float("nan")) for s in seeds]
+        thr_f2_vals = [s.get("thr_f2", float("nan")) for s in seeds]
+        row_a = {
             "condition": cond,
             "name":      condition_names.get(cond, str(cond)),
             "f1_mean":   float(np.mean(f1_vals)),
             "f1_std":    float(np.std(f1_vals)),
             "f2_mean":   float(np.mean(f2_vals)),
             "f2_std":    float(np.std(f2_vals)),
-        })
+            "thr_f1_mean": float(np.nanmean(thr_f1_vals)),
+            "thr_f1_std":  float(np.nanstd(thr_f1_vals)),
+            "thr_f2_mean": float(np.nanmean(thr_f2_vals)),
+            "thr_f2_std":  float(np.nanstd(thr_f2_vals)),
+        }
+        # Frozen-threshold deployment-mode metrics (if present)
+        if all("frozen" in s for s in seeds):
+            frozen_keys = sorted(seeds[0]["frozen"].keys())
+            row_a["frozen"] = {}
+            for k in frozen_keys:
+                vals = [s["frozen"][k] for s in seeds]
+                row_a["frozen"][k] = {
+                    "threshold": float(vals[0]["threshold"]),
+                    "f2_mean":   float(np.mean([v["f2"] for v in vals])),
+                    "f2_std":    float(np.std([v["f2"] for v in vals])),
+                    "f1_mean":   float(np.mean([v["f1"] for v in vals])),
+                    "f1_std":    float(np.std([v["f1"] for v in vals])),
+                    "precision_mean": float(np.mean([v["precision"] for v in vals])),
+                    "recall_mean":    float(np.mean([v["recall"]    for v in vals])),
+                }
+        table_a.append(row_a)
 
         # Table B: D2-only F2 + bootstrap CI
         # Use mean of observed D2-F2 across seeds, and mean of CIs
