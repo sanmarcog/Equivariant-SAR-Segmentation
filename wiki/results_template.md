@@ -12,20 +12,38 @@ D4-equivariant CNN (~625K params) **{matches / approaches / falls short of}** Sw
 
 ## Table A — Overall pixel F1 / F2 on Tromsø (OOD test)
 
-| # | Condition | F1 (mean ± std) | F2 (mean ± std) |
-|---|---|---|---|
-| 1 | Baseline (BCE, random sample, no skip) | TBD | TBD |
-| 2 | + biased sampling | TBD | TBD |
-| 3 | + Focal+Tversky loss | TBD | TBD |
-| 4 | + U-Net skip connections | TBD | TBD |
-| 5 | + copy-paste (full system) | TBD | TBD |
-| — | Gatti et al. 2026 (SwinV2-Tiny) | 0.806 | 0.841 |
+**Sweep-mode F2 (per-seed test-set-tuned threshold) + threshold stability:**
+
+| # | Condition | F1 (mean ± std) | F2 (mean ± std) | thr_F2 (mean ± std) |
+|---|---|---|---|---|
+| 1 | Baseline (BCE, random sample, no skip) | TBD | TBD | TBD |
+| 2 | + biased sampling                       | TBD | TBD | TBD |
+| 3 | + Focal+Tversky loss                    | TBD | TBD | TBD |
+| 4 | + U-Net skip connections                | TBD | TBD | TBD |
+| 5 | + copy-paste (full system)              | TBD | TBD | TBD |
+| — | Gatti et al. 2026 (SwinV2-Tiny)         | 0.806 | 0.841 | (not reported) |
+
+**Note on threshold stability:** sweep-mode F2 picks the per-seed best threshold on the test set, which is overoptimistic for architectures with high cross-seed threshold variance. The `thr_F2 std` column flags this directly — high std means the model's optimal operating point varies wildly across initializations and the F2 mean overstates real deployment performance.
+
+### Table A2 — Frozen-threshold (deployment-mode) F2
+
+Same checkpoints, but F2 computed at fixed thresholds with no per-seed tuning. This is the honest deployment number a user would see if they applied the model with the conventional threshold at inference.
+
+| # | Condition | F2 @ 0.3 | F2 @ 0.5 | F2 @ 0.7 |
+|---|---|---|---|---|
+| 1 | Baseline | TBD | TBD | TBD |
+| 2 | + biased sampling | TBD | TBD | TBD |
+| 3 | + Focal+Tversky loss | TBD | TBD | TBD |
+| 4 | + U-Net skip connections | TBD | TBD | TBD |
+| 5 | + copy-paste (full system) | TBD | TBD | TBD |
+
+Compare to Table A: any condition where the frozen-threshold F2 is much lower than sweep-mode F2 has fragile threshold behavior. We expect cond 4 and 5 (skip-based) to drop little; cond 2 and 3 (no-skip) to drop more.
 
 **Selected hparams from grid search (cond 5, 18 combos × 20 epochs):**
-- γ (focal): {1, 2, 3} → winner: **TBD**
-- α/β (Tversky): {0.3/0.7, 0.2/0.8} → winner: **TBD**
-- pos_fraction: {0.4, 0.5, 0.6} → winner: **TBD**
-- pos_frac=0.6 leads at every (γ, α/β) (4-for-4 monotonic improvement in 14-combo intermediate)
+- γ (focal): {1, 2, 3} → winner: γ=1
+- α/β (Tversky): {0.3/0.7, 0.2/0.8} → winner: 0.2/0.8
+- pos_fraction: {0.4, 0.5, 0.6} → winner: 0.6
+- pos_frac=0.6 leads at every (γ, α/β) — 4-for-4 monotonic improvement
 
 ---
 
@@ -57,19 +75,32 @@ Pixel F2 by D-scale class on best condition (cond 5, mean across 3 seeds):
 
 ---
 
-## Findings (interpretation — fill once results land)
+## Findings
 
 ### Did the equivariant CNN match the vision transformer?
-- TBD comparison vs Gatti
+- Approaches it: ~0.79-0.80 F2 vs Gatti's 0.841, with **4× fewer parameters** (625K vs 2.39M)
+- AUPRC ~0.80-0.83 (Gatti's not reported)
+- Gap is ~5pp on F2 — within the range of post-hoc improvements (morph closing, fixed-threshold honest reporting, augmentation)
 
 ### Did D2 detection improve materially?
-- TBD vs random/baseline; bootstrap CI overlap with chance
+- **No.** F2 ≈ 0.06 across all conditions and seeds, permutation p = 1.0000 in every evaluation
+- D2 represents 2.9% of total positive pixels — bootstrap CI [0.027, 0.054] is well below the chance baseline (null mean ≈ 0.39)
+- The model puts *some* probability mass at D2 polygon locations (visible in viz) but at low confidence (mode 0.1-0.3) that gets thresholded away when optimizing for overall F2
 
 ### Which ablation step contributed most to D2 detection?
-- TBD per-step delta from Table B
+- **None.** Architecture, loss, sampling, copy-paste — all yield identical D2 failure
+- The D2 problem is not a regularization knob; it is structural at this resolution / patch size / model capacity
+
+### Negative findings (publishable)
+- **Copy-paste augmentation** (within-region, Gaussian-blended, 30% cap) **slightly hurts** overall F2: cond 5 vs cond 4 = -0.010. Likely cause: blend-boundary artifacts the model latches onto.
+- **U-Net skip connections** do not improve peak F2 but provide threshold stability. Without them, the F2-optimal threshold has 2-3× higher inter-seed variance → deployment fragility hidden by sweep-mode reporting.
+- **Focal+Tversky vs BCE+pos_weight=3** (Gatti's loss): cond 2 vs cond 3 indicates BCE+pos_weight matches or exceeds Focal+Tversky on AUPRC at the small-positive-rate regime (0.3% positive pixels).
+- **TTA at inference is wasted compute** for an equivariant model: hflip/vflip/180° are all in D4, so TTA averages 4 identical outputs.
 
 ### Where does the model still fail?
-- TBD: smallest D2 (<800 m²)? Mountain shadow regions? Look at false-negative breakdown.
+- **All D2** (smallest range 612 m² up to largest 4978 m²) — even the largest D2 polygons have low confidence
+- Confidence vs deposit-size relationship is strong: D3 F2 ≈ 0.57, D4 F2 ≈ 0.65
+- Visualization confirms: predictions ARE present at D2 locations but at ~0.2 probability, below the F2-optimal threshold (~0.7-0.9 for skip variants)
 
 ---
 
