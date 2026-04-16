@@ -558,32 +558,48 @@ def polygon_metrics(
     poly_masks: list[dict],   # from build_polygon_masks
     threshold:  float,
     iou_thresh: float = 0.1,
+    strict_coverage_frac: float = 0.5,   # Gatti's Hit% definition: ≥50% of polygon area
 ) -> dict:
     """
     Polygon-level F1/F2 and hit rate on Tromsø OOD test scene.
 
-    A GT polygon is "hit"    if ≥1 predicted positive pixel overlaps it.
-    A GT polygon is "matched" if a predicted CC has IoU ≥ iou_thresh with it.
+    A GT polygon is "hit"         if ≥1 predicted positive pixel overlaps it (permissive).
+    A GT polygon is "hit_strict"  if ≥strict_coverage_frac of its area is predicted
+                                  positive — matches Gatti et al. 2026's "Hit %" definition
+                                  (Table 7 caption: "detected when at least 50% of its
+                                  area is predicted as avalanche").
+    A GT polygon is "matched"     if a predicted CC has IoU ≥ iou_thresh with it.
 
     Returns:
-        dict with overall and per-D-scale metrics.
+        dict with overall and per-D-scale metrics, under BOTH hit definitions.
     """
     from scipy.ndimage import label as ndi_label
 
     pred_binary = (prob_map >= threshold).astype(np.uint8)
     labeled, n_pred = ndi_label(pred_binary)
 
-    hits_by_d    = {1: [], 2: [], 3: [], 4: []}
-    matched_by_d = {1: [], 2: [], 3: [], 4: []}
+    hits_by_d        = {1: [], 2: [], 3: [], 4: []}
+    hits_strict_by_d = {1: [], 2: [], 3: [], 4: []}   # Gatti-style ≥50% area
+    matched_by_d     = {1: [], 2: [], 3: [], 4: []}
 
     for pm in poly_masks:
         gt_px  = pm["mask"]
         d      = pm["size"]
         hits_by_d.setdefault(d, [])
+        hits_strict_by_d.setdefault(d, [])
         matched_by_d.setdefault(d, [])
 
+        # Permissive: ≥1 predicted positive pixel overlaps the polygon
         hit = bool((pred_binary.astype(bool) & gt_px).any())
         hits_by_d[d].append(int(hit))
+
+        # Strict: ≥strict_coverage_frac of polygon area is predicted positive (Gatti)
+        poly_n = int(gt_px.sum())
+        if poly_n > 0:
+            cov = float((pred_binary.astype(bool) & gt_px).sum()) / poly_n
+        else:
+            cov = 0.0
+        hits_strict_by_d[d].append(int(cov >= strict_coverage_frac))
 
         best_iou = 0.0
         if n_pred > 0:
@@ -598,18 +614,33 @@ def polygon_metrics(
         matched_by_d[d].append(int(best_iou >= iou_thresh))
 
     results = {}
-    all_hits = []; all_matched = []
+    all_hits = []; all_hits_strict = []; all_matched = []
     for d in [1, 2, 3, 4]:
-        h = hits_by_d.get(d, [])
-        m = matched_by_d.get(d, [])
-        results[f"n_D{d}"]        = len(h)
-        results[f"hit_rate_D{d}"] = float(np.mean(h)) if h else 0.0
-        results[f"matched_D{d}"]  = int(np.sum(m))
+        h  = hits_by_d.get(d, [])
+        hs = hits_strict_by_d.get(d, [])
+        m  = matched_by_d.get(d, [])
+        results[f"n_D{d}"]               = len(h)
+        results[f"hit_rate_D{d}"]        = float(np.mean(h))  if h  else 0.0
+        results[f"hit_rate_strict_D{d}"] = float(np.mean(hs)) if hs else 0.0
+        results[f"matched_D{d}"]         = int(np.sum(m))
         all_hits.extend(h)
+        all_hits_strict.extend(hs)
         all_matched.extend(m)
 
-    results["hit_rate_overall"] = float(np.mean(all_hits)) if all_hits else 0.0
+    results["hit_rate_overall"]        = float(np.mean(all_hits))        if all_hits        else 0.0
+    results["hit_rate_strict_overall"] = float(np.mean(all_hits_strict)) if all_hits_strict else 0.0
+    results["hit_rate_strict_coverage_frac"] = float(strict_coverage_frac)
     results["n_gt_total"] = len(all_hits)
+
+    # Also: Gatti excludes D1 — report hit rates on 112-polygon subset (D2+D3+D4)
+    hits_excl_d1 = []
+    hits_strict_excl_d1 = []
+    for d in [2, 3, 4]:
+        hits_excl_d1.extend(hits_by_d.get(d, []))
+        hits_strict_excl_d1.extend(hits_strict_by_d.get(d, []))
+    results["hit_rate_excl_D1"]        = float(np.mean(hits_excl_d1))        if hits_excl_d1        else 0.0
+    results["hit_rate_strict_excl_D1"] = float(np.mean(hits_strict_excl_d1)) if hits_strict_excl_d1 else 0.0
+    results["n_gt_excl_D1"] = len(hits_excl_d1)
 
     n_tp = sum(all_matched)
     n_fn = len(all_matched) - n_tp
