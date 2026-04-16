@@ -101,6 +101,8 @@ The story is now: equivariant CNNs are parameter-efficient for SAR avalanche seg
 
 **Copy-paste hurts.** Cond 4 (no copy-paste) F2=0.797 > cond 5 (copy-paste) F2=0.782. Blend-boundary artifacts likely cause. Drop copy-paste from final system.
 
+**Cond 4 is best architecture (skip + no copy-paste).** Cond 3 (no skip) shows marginally higher sweep-mode F2 (0.800 vs 0.793) but has 2.4× higher threshold instability across seeds (threshold std=0.17 vs 0.07). Sweep-mode hides this because each seed gets its own optimal threshold. With a frozen threshold (deployment-realistic), cond 4 is expected to outperform cond 3. Paper framing: "skip connections stabilize the operating point without sacrificing peak F2."
+
 **D2 is a confidence problem, not localization.** Viz shows the model puts probability mass on D2 deposits (correct location) but at low confidence (0.1–0.3), thresholded away when optimizing overall F2. The signal exists at 64×64 — the model can't distinguish it from noise confidently enough. 128×128 patch size dropped from priority (won't fix a calibration issue).
 
 **TTA is redundant on D4-equivariant model.** The 4 TTA variants (identity, h-flip, v-flip, both-flips) are all D4 group elements. Model produces identical logits for each. Remove TTA, cut eval time 4×. Paper framing: "equivariance eliminates TTA" alongside "eliminates 4/6 geometric augmentations."
