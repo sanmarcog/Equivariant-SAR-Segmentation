@@ -53,6 +53,7 @@ for COND in 1 2 3 4 5; do
                 --out      $EVAL_OUT \
                 --no-tta \
                 --morph-closing \
+                --multi-threshold \
                 --n-bootstrap 1000 \
                 --n-perm      1000
         "
