@@ -251,38 +251,34 @@ class D4SegNet(nn.Module):
 
         bt = self.dropout(bt)
 
-        # ── Average-pool extra channels to each spatial scale ──────────
-        def _extra_at(sz: int) -> torch.Tensor:
-            return F.adaptive_avg_pool2d(x_extra, (sz, sz))
-
-        e4  = _extra_at(4)
-        e8  = _extra_at(8)
-        e16 = _extra_at(16)
-        e32 = _extra_at(32)
-        e64 = _extra_at(64)
+        # ── Average-pool extra channels to match each feature map's size ─
+        # (dynamic so the model supports arbitrary input sizes that are
+        #  multiples of 16: 64×64, 128×128, etc.)
+        def _extra_like(feat: torch.Tensor) -> torch.Tensor:
+            return F.adaptive_avg_pool2d(x_extra, feat.shape[-2:])
 
         # ── Decoder ────────────────────────────────────────────────────
-        # Stage 1: bottleneck 4×4
-        x = self.dec1_pre(torch.cat([bt, e4], dim=1))   # [B, 128, 4, 4]
-        x = self.dec1_up(x)                               # [B, 128, 8, 8]
-        x = self.dec1_post(torch.cat([x, s4, e8], dim=1)) # [B, 128, 8, 8]
+        # Stage 1: at bottleneck scale (e.g., 4×4 for 64 in, 8×8 for 128 in)
+        x = self.dec1_pre(torch.cat([bt, _extra_like(bt)], dim=1))
+        x = self.dec1_up(x)                                 # up×2 → s4's scale
+        x = self.dec1_post(torch.cat([x, s4, _extra_like(s4)], dim=1))
 
         # Stage 2
-        x = self.dec2_pre(torch.cat([x, e8], dim=1))    # [B, 64, 8, 8]
-        x = self.dec2_up(x)                               # [B, 64, 16, 16]
-        x = self.dec2_post(torch.cat([x, s3, e16], dim=1))
+        x = self.dec2_pre(torch.cat([x, _extra_like(x)], dim=1))
+        x = self.dec2_up(x)
+        x = self.dec2_post(torch.cat([x, s3, _extra_like(s3)], dim=1))
 
         # Stage 3
-        x = self.dec3_pre(torch.cat([x, e16], dim=1))
+        x = self.dec3_pre(torch.cat([x, _extra_like(x)], dim=1))
         x = self.dec3_up(x)
-        x = self.dec3_post(torch.cat([x, s2, e32], dim=1))
+        x = self.dec3_post(torch.cat([x, s2, _extra_like(s2)], dim=1))
 
         # Stage 4
-        x = self.dec4_pre(torch.cat([x, e32], dim=1))
+        x = self.dec4_pre(torch.cat([x, _extra_like(x)], dim=1))
         x = self.dec4_up(x)
-        x = self.dec4_post(torch.cat([x, s1, e64], dim=1))
+        x = self.dec4_post(torch.cat([x, s1, _extra_like(s1)], dim=1))
 
-        logit = self.final_conv(x)   # [B, 1, 64, 64]
+        logit = self.final_conv(x)   # [B, 1, H, W]
 
         # ── Area head ──────────────────────────────────────────────────
         soft_mask = torch.sigmoid(logit)
@@ -313,30 +309,33 @@ class D4SegNetNoSkip(D4SegNet):
         bt = self._group_diff(fp5, fr5, self.gp5)
         bt = self.dropout(bt)
 
-        def _extra_at(sz: int) -> torch.Tensor:
-            return F.adaptive_avg_pool2d(x_extra, (sz, sz))
+        def _extra_like(feat: torch.Tensor) -> torch.Tensor:
+            return F.adaptive_avg_pool2d(x_extra, feat.shape[-2:])
 
-        e4 = _extra_at(4); e8 = _extra_at(8); e16 = _extra_at(16); e32 = _extra_at(32); e64 = _extra_at(64)
-
-        # Decoder without skip concatenation — pad with zeros to match channel dims
+        # Decoder without skip concatenation — pad with zeros to match channel dims.
+        # Spatial sizes derived dynamically from the corresponding encoder feature.
         n1, n2, n3, n4, n5 = self.n_reg
-        zeros = lambda n, sz: torch.zeros(bt.shape[0], n, sz, sz, device=bt.device, dtype=bt.dtype)
+        def zeros_like(feat: torch.Tensor, n: int) -> torch.Tensor:
+            return torch.zeros(
+                feat.shape[0], n, feat.shape[-2], feat.shape[-1],
+                device=bt.device, dtype=bt.dtype,
+            )
 
-        x = self.dec1_pre(torch.cat([bt, e4], dim=1))
+        x = self.dec1_pre(torch.cat([bt, _extra_like(bt)], dim=1))
         x = self.dec1_up(x)
-        x = self.dec1_post(torch.cat([x, zeros(n4, 8),  e8],  dim=1))
+        x = self.dec1_post(torch.cat([x, zeros_like(x, n4), _extra_like(x)], dim=1))
 
-        x = self.dec2_pre(torch.cat([x, e8], dim=1))
+        x = self.dec2_pre(torch.cat([x, _extra_like(x)], dim=1))
         x = self.dec2_up(x)
-        x = self.dec2_post(torch.cat([x, zeros(n3, 16), e16], dim=1))
+        x = self.dec2_post(torch.cat([x, zeros_like(x, n3), _extra_like(x)], dim=1))
 
-        x = self.dec3_pre(torch.cat([x, e16], dim=1))
+        x = self.dec3_pre(torch.cat([x, _extra_like(x)], dim=1))
         x = self.dec3_up(x)
-        x = self.dec3_post(torch.cat([x, zeros(n2, 32), e32], dim=1))
+        x = self.dec3_post(torch.cat([x, zeros_like(x, n2), _extra_like(x)], dim=1))
 
-        x = self.dec4_pre(torch.cat([x, e32], dim=1))
+        x = self.dec4_pre(torch.cat([x, _extra_like(x)], dim=1))
         x = self.dec4_up(x)
-        x = self.dec4_post(torch.cat([x, zeros(n1, 64), e64], dim=1))
+        x = self.dec4_post(torch.cat([x, zeros_like(x, n1), _extra_like(x)], dim=1))
 
         logit = self.final_conv(x)
         soft_mask = torch.sigmoid(logit)
