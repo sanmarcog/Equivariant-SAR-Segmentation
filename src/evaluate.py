@@ -194,23 +194,19 @@ def dscale_pixel_f2(
     """
     Compute pixel F2 treating each D-scale class as the positive class.
 
-    For D-scale d:
-      - Positives = pixels in D-scale-d polygons (from poly_subset)
+    For D-scale d (STRICT convention — any non-d prediction is FP):
       - TP = predicted positive AND in a D-scale-d polygon
-      - FP = predicted positive AND NOT in any D-scale-d polygon
+      - FP = predicted positive AND NOT in any D-scale-d polygon  (includes other D-scales)
       - FN = in a D-scale-d polygon AND predicted negative
 
-    Returns:
-        {1: f2_d1, 2: f2_d2, 3: f2_d3, 4: f2_d4}
-        d-scales with zero polygons return 0.0.
+    NOTE: this metric answers "does the model preferentially predict D2 over D3/D4?"
+    For the question "does the model find D2 among non-deposit terrain?" see
+    dscale_pixel_f2_vs_bg() which excludes other D-scales from FP.
     """
     pred_binary = (prob_map >= thr)
     H, W = prob_map.shape
 
-    # Subset of polygon masks to use
     masks = [poly_masks[i] for i in poly_subset] if poly_subset is not None else poly_masks
-
-    # Group masks by D-scale
     by_dscale: dict[int, list[np.ndarray]] = {}
     for pm in masks:
         d = pm["size"]
@@ -222,7 +218,6 @@ def dscale_pixel_f2(
             results[d] = 0.0
             continue
 
-        # Union of all D-scale-d polygon masks
         gt_d = np.zeros((H, W), dtype=bool)
         for m in by_dscale[d]:
             gt_d |= m
@@ -235,6 +230,72 @@ def dscale_pixel_f2(
         rec  = tp / (tp + fn + 1e-10)
         results[d] = float(_f_beta(prec, rec, beta=2.0))
 
+    return results
+
+
+def dscale_pixel_f2_vs_bg(
+    prob_map:   np.ndarray,        # [H, W] float
+    poly_masks: list[dict],        # from build_polygon_masks
+    thr:        float,
+    poly_subset: list[int] | None = None,
+) -> dict[int, dict]:
+    """
+    Per-D-scale F2 where FP counts only predictions in TRUE BACKGROUND
+    (not in ANY D-scale polygon). Pixels inside OTHER D-scale polygons are
+    excluded from the metric entirely — they are neither positive nor negative.
+
+    For D-scale d:
+      - TP = predicted positive AND in D-scale-d polygon
+      - FP = predicted positive AND NOT in ANY D-scale polygon (true background)
+      - FN = in D-scale-d polygon AND predicted negative
+      - Ignored: pixels in other D-scale polygons
+
+    This answers "does the model detect D2 among non-deposit terrain?" which
+    is a more natural question than the strict dscale_pixel_f2 metric.
+
+    Returns:
+        {d: {f2, precision, recall, tp, fp, fn}}
+    """
+    pred_binary = (prob_map >= thr)
+    H, W = prob_map.shape
+
+    masks = [poly_masks[i] for i in poly_subset] if poly_subset is not None else poly_masks
+    by_dscale: dict[int, list[np.ndarray]] = {}
+    for pm in masks:
+        by_dscale.setdefault(pm["size"], []).append(pm["mask"])
+
+    # Union of ALL D-scale polygons (any deposit)
+    all_deposit = np.zeros((H, W), dtype=bool)
+    for d_list in by_dscale.values():
+        for m in d_list:
+            all_deposit |= m
+
+    results: dict[int, dict] = {}
+    for d in [1, 2, 3, 4]:
+        if d not in by_dscale or not by_dscale[d]:
+            results[d] = {"f2": 0.0, "precision": 0.0, "recall": 0.0,
+                          "tp": 0, "fp": 0, "fn": 0}
+            continue
+
+        gt_d = np.zeros((H, W), dtype=bool)
+        for m in by_dscale[d]:
+            gt_d |= m
+
+        # "true background" = NOT in any D-scale polygon
+        true_bg = ~all_deposit
+
+        tp = int((pred_binary & gt_d).sum())
+        fp = int((pred_binary & true_bg).sum())
+        fn = int((~pred_binary & gt_d).sum())
+
+        prec = tp / (tp + fp + 1e-10)
+        rec  = tp / (tp + fn + 1e-10)
+        results[d] = {
+            "f2":        float(_f_beta(prec, rec, beta=2.0)),
+            "precision": float(prec),
+            "recall":    float(rec),
+            "tp": tp, "fp": fp, "fn": fn,
+        }
     return results
 
 
@@ -776,9 +837,18 @@ def _evaluate_checkpoint(
             thr_f2 = pixel_metrics["thr_f2"]
             poly_masks = build_polygon_masks(gt_gdf, meta)
 
-            # Per-D-scale pixel F2
+            # Per-D-scale pixel F2 — strict convention (other D-scales count as FP)
             d2_f2_vals = dscale_pixel_f2(prob_map, poly_masks, thr=thr_f2)
             scene_out["dscale_f2"] = {int(d): float(v) for d, v in d2_f2_vals.items()}
+
+            # Per-D-scale F2 — vs-true-background convention (other D-scales ignored).
+            # Answers "can the model find D2 among non-deposit terrain?"
+            d_vsbg = dscale_pixel_f2_vs_bg(prob_map, poly_masks, thr=thr_f2)
+            scene_out["dscale_f2_vs_bg"] = {
+                str(d): {k: (float(v) if isinstance(v, float) else int(v))
+                         for k, v in r.items()}
+                for d, r in d_vsbg.items()
+            }
 
             # Bootstrap CIs
             boot_ci = bootstrap_dscale_ci(
