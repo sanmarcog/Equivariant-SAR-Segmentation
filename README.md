@@ -21,6 +21,7 @@ The D4 group equivariance (exact invariance to flips and 90-degree rotations) is
 |---|---|---|---|
 | U-Net (Ronneberger et al.) | 31.04M | 0.487 | 0.321 |
 | FCN8 (Long et al.) | 134.27M | 0.602 | 0.430 |
+| TinyCD (Codegoni et al.) | 0.29M | 0.766 | 0.621 |
 | RUNet (Weber) | 7.76M | 0.767 | 0.622 |
 | A-BT-UNet (Guo et al.) | 12.43M | 0.793 | 0.657 |
 | **D4-EquiCNN (ours)** | **0.63M** | **0.794** | **0.659** |
