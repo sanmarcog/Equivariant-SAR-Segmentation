@@ -46,8 +46,8 @@ Our model matches Gatti on recall and D3/D4 detection, and **beats it on F2**. T
 
 The model outputs a probability map for each scene. Below: predicted probability (viridis colormap) overlaid with ground-truth polygon boundaries colored by EAWS D-scale (red = D2, cyan = D3, green = D4).
 
-![Large-scale prediction overlay](figures/pair24_overlay.png)
-*Model probability map on a region with mixed D-scales. The model produces high-confidence predictions (yellow) on D3 deposits (cyan boundaries) while the smaller D2 deposits (red boundaries) receive lower, more diffuse probability — reflecting the fundamental difficulty of detecting small avalanches at 10m SAR resolution.*
+![Large-scale prediction overlay](figures/pair16_overlay.png)
+*Model probability map on a region with mixed D-scales. The model produces high-confidence predictions (yellow) on the D3 deposit (cyan boundary) while the adjacent D2 deposit (red boundary) receives lower, more diffuse probability — reflecting the fundamental difficulty of detecting small avalanches at 10m SAR resolution.*
 
 ### D2 detection is bimodal — driven by environment, not size
 
