@@ -811,7 +811,11 @@ def _evaluate_checkpoint(
     stats  = load_stats(stats_path)
 
     ckpt  = torch.load(ckpt_path, map_location=device)
-    model = build_model(use_skip=ckpt.get("cfg", {}).get("use_skip", True)).to(device)
+    cfg = ckpt.get("cfg", {})
+    model = build_model(
+        use_skip=cfg.get("use_skip", True),
+        n_reg=cfg.get("n_reg", None),
+    ).to(device)
     model.load_state_dict(ckpt["state_dict"])
     model.eval()
 

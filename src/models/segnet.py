@@ -82,12 +82,15 @@ def _eq_block(
 # Decoder block (standard Conv2d)
 # ---------------------------------------------------------------------------
 
-def _dec_block(in_ch: int, out_ch: int) -> nn.Sequential:
-    return nn.Sequential(
+def _dec_block(in_ch: int, out_ch: int, dropout_p: float = 0.0) -> nn.Sequential:
+    layers = [
         nn.Conv2d(in_ch, out_ch, 3, padding=1, bias=False),
         nn.BatchNorm2d(out_ch),
         nn.ELU(inplace=True),
-    )
+    ]
+    if dropout_p > 0:
+        layers.append(nn.Dropout2d(p=dropout_p))
+    return nn.Sequential(*layers)
 
 
 # ---------------------------------------------------------------------------
@@ -116,6 +119,7 @@ class D4SegNet(nn.Module):
         extra_ch:         int = 4,
         n_reg:            list[int] | None = None,
         dropout_p:        float = 0.3,
+        dec_dropout_p:    float = 0.0,
     ) -> None:
         super().__init__()
 
@@ -127,6 +131,7 @@ class D4SegNet(nn.Module):
         self.extra_ch         = extra_ch
         self.n_reg            = n_reg
         self.dropout_p        = dropout_p
+        self.dec_dropout_p    = dec_dropout_p
 
         # ── Equivariant backbone ─────────────────────────────────────────
         gspace = gspaces.flipRot2dOnR2(N=4)
@@ -162,24 +167,25 @@ class D4SegNet(nn.Module):
         n1, n2, n3, n4, n5 = n_reg
 
         # Stage 1: bottleneck [n5, 4,4] + extra [4, 4,4] → refine → upsample → cat skip4 + extra
-        self.dec1_pre = _dec_block(n5 + extra_ch,  128)                  # [128, 4, 4]
+        dp = dec_dropout_p
+        self.dec1_pre = _dec_block(n5 + extra_ch,  128, dp)              # [128, 4, 4]
         self.dec1_up  = nn.ConvTranspose2d(128, 128, 2, stride=2)         # [128, 8, 8]
-        self.dec1_post= _dec_block(128 + n4 + extra_ch, 128)             # [128, 8, 8]
+        self.dec1_post= _dec_block(128 + n4 + extra_ch, 128, dp)         # [128, 8, 8]
 
         # Stage 2
-        self.dec2_pre = _dec_block(128 + extra_ch, 64)                   # [64, 8, 8]
+        self.dec2_pre = _dec_block(128 + extra_ch, 64, dp)               # [64, 8, 8]
         self.dec2_up  = nn.ConvTranspose2d(64, 64, 2, stride=2)          # [64, 16, 16]
-        self.dec2_post= _dec_block(64 + n3 + extra_ch, 64)              # [64, 16, 16]
+        self.dec2_post= _dec_block(64 + n3 + extra_ch, 64, dp)          # [64, 16, 16]
 
         # Stage 3
-        self.dec3_pre = _dec_block(64 + extra_ch, 32)                    # [32, 16, 16]
+        self.dec3_pre = _dec_block(64 + extra_ch, 32, dp)                # [32, 16, 16]
         self.dec3_up  = nn.ConvTranspose2d(32, 32, 2, stride=2)          # [32, 32, 32]
-        self.dec3_post= _dec_block(32 + n2 + extra_ch, 32)              # [32, 32, 32]
+        self.dec3_post= _dec_block(32 + n2 + extra_ch, 32, dp)          # [32, 32, 32]
 
         # Stage 4
-        self.dec4_pre = _dec_block(32 + extra_ch, 16)                    # [16, 32, 32]
+        self.dec4_pre = _dec_block(32 + extra_ch, 16, dp)                # [16, 32, 32]
         self.dec4_up  = nn.ConvTranspose2d(16, 16, 2, stride=2)          # [16, 64, 64]
-        self.dec4_post= _dec_block(16 + n1 + extra_ch, 16)              # [16, 64, 64]
+        self.dec4_post= _dec_block(16 + n1 + extra_ch, 16, dp)          # [16, 64, 64]
 
         # Final 1×1 → logit
         self.final_conv = nn.Conv2d(16, 1, kernel_size=1)
@@ -347,17 +353,13 @@ class D4SegNetNoSkip(D4SegNet):
 # Factory
 # ---------------------------------------------------------------------------
 
-def build_model(use_skip: bool = True, n_reg: list[int] | None = None) -> nn.Module:
-    """
-    Build the segmentation model.
-
-    Args:
-        use_skip: If True, full U-Net with skip connections.
-                  If False, no-skip ablation variant.
-        n_reg:    List of 5 ints for equivariant channel counts.
-    """
+def build_model(
+    use_skip: bool = True,
+    n_reg: list[int] | None = None,
+    dec_dropout_p: float = 0.0,
+) -> nn.Module:
     cls = D4SegNet if use_skip else D4SegNetNoSkip
-    return cls(n_reg=n_reg)
+    return cls(n_reg=n_reg, dec_dropout_p=dec_dropout_p)
 
 
 def count_parameters(model: nn.Module) -> int:

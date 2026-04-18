@@ -113,6 +113,26 @@ def tversky_loss(
 
 
 # ---------------------------------------------------------------------------
+# Dice loss (directly optimizes F1 → sharper predictions)
+# ---------------------------------------------------------------------------
+
+def dice_loss(
+    logit:  torch.Tensor,   # [B, 1, H, W]
+    target: torch.Tensor,   # [B, 1, H, W], values in [0, 1]
+    smooth: float = 1.0,
+) -> torch.Tensor:
+    prob = torch.sigmoid(logit)
+    prob_flat   = prob.view(prob.shape[0], -1)
+    target_flat = target.view(target.shape[0], -1)
+
+    intersection = (prob_flat * target_flat).sum(dim=1)
+    union = prob_flat.sum(dim=1) + target_flat.sum(dim=1)
+
+    dice = (2.0 * intersection + smooth) / (union + smooth)
+    return (1.0 - dice).mean()
+
+
+# ---------------------------------------------------------------------------
 # BCE-only loss (ablation baseline, condition 1)
 # ---------------------------------------------------------------------------
 
@@ -171,6 +191,12 @@ class SegLoss(nn.Module):
 
         if self.mode == "bce":
             return bce_loss(logit, target_smooth, pos_weight=self.pos_weight)
+
+        if self.mode == "dice":
+            return dice_loss(logit, target_smooth)
+
+        if self.mode == "bce_dice":
+            return 0.5 * bce_loss(logit, target_smooth, pos_weight=self.pos_weight) + 0.5 * dice_loss(logit, target_smooth)
 
         fl = focal_loss(logit, target_smooth, gamma=self.gamma)
         tl = tversky_loss(logit, target_smooth, alpha=self.alpha, beta=self.beta)

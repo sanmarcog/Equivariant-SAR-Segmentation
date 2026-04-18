@@ -302,6 +302,12 @@ def train(
     patch_size: int     = 64,
     train_stride: int | None = None,
     online_aug: bool    = False,
+    aug_strength: float = 1.0,
+    patience:   int     = 20,
+    dec_dropout_p: float = 0.0,
+    n_reg:      list[int] | None = None,
+    warm_restarts: int  = 0,
+    loss_mode:  str | None = None,
 ) -> dict:
     """
     Train one model (one ablation condition + one seed).
@@ -311,7 +317,9 @@ def train(
     set_seed(seed)
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    cfg = ABLATION_CONDITIONS[condition]
+    cfg = {**ABLATION_CONDITIONS[condition], "n_reg": n_reg}
+    if loss_mode is not None:
+        cfg["mode"] = loss_mode
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     log.info("Condition %d | seed %d | device %s", condition, seed, device)
 
@@ -323,7 +331,7 @@ def train(
     log.info("Patch size=%d, train stride=%d", patch_size, train_stride or patch_size // 2)
 
     # ── Model ─────────────────────────────────────────────────────────
-    model = build_model(use_skip=cfg["use_skip"]).to(device)
+    model = build_model(use_skip=cfg["use_skip"], dec_dropout_p=dec_dropout_p, n_reg=n_reg).to(device)
     log.info("Model params: %d", count_parameters(model))
 
     # ── Loss ──────────────────────────────────────────────────────────
@@ -341,17 +349,26 @@ def train(
     # ── Online geometric + radiometric augmentation (equivariance-aware) ─
     aug_online = None
     if online_aug:
-        aug_online = OnlineAugment(rng_seed=seed)
-        log.info("Online augmentation ENABLED (off-D4-lattice: affine + Gaussian noise + intensity)")
+        aug_online = OnlineAugment(rng_seed=seed, strength=aug_strength)
+        log.info("Online augmentation ENABLED (strength=%.1f)", aug_strength)
 
     # ── Optimiser + LR schedule ────────────────────────────────────────
     optimizer = torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=wd)
 
-    def _lr_lambda(epoch: int) -> float:
-        if epoch < warmup_epochs:
-            return float(epoch + 1) / warmup_epochs
-        progress = (epoch - warmup_epochs) / max(epochs - warmup_epochs, 1)
-        return 0.5 * (1.0 + np.cos(np.pi * progress))
+    if warm_restarts > 0:
+        T_0 = max((epochs - warmup_epochs) // warm_restarts, 1)
+        def _lr_lambda(epoch: int) -> float:
+            if epoch < warmup_epochs:
+                return float(epoch + 1) / warmup_epochs
+            cyc_epoch = (epoch - warmup_epochs) % T_0
+            return 0.5 * (1.0 + np.cos(np.pi * cyc_epoch / T_0))
+        log.info("Cosine warm restarts: %d restarts, T_0=%d epochs", warm_restarts, T_0)
+    else:
+        def _lr_lambda(epoch: int) -> float:
+            if epoch < warmup_epochs:
+                return float(epoch + 1) / warmup_epochs
+            progress = (epoch - warmup_epochs) / max(epochs - warmup_epochs, 1)
+            return 0.5 * (1.0 + np.cos(np.pi * progress))
 
     scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=_lr_lambda)
 
@@ -373,9 +390,8 @@ def train(
         )
 
     # ── Training loop ─────────────────────────────────────────────────
-    best_auprc  = -1.0
+    best_f1     = -1.0
     no_improve  = 0
-    patience    = 20
     best_ckpt   = out_dir / f"best_cond{condition}_seed{seed}.pt"
 
     for epoch in range(1, epochs + 1):
@@ -412,9 +428,9 @@ def train(
                 "lr":            scheduler.get_last_lr()[0],
             })
 
-        # Checkpoint on best AUPRC
-        if val_metrics["auprc"] > best_auprc:
-            best_auprc = val_metrics["auprc"]
+        # Checkpoint on best val F1
+        if val_metrics["best_f1"] > best_f1:
+            best_f1 = val_metrics["best_f1"]
             no_improve = 0
             torch.save({
                 "epoch":       epoch,
@@ -423,14 +439,14 @@ def train(
                 "cfg":         cfg,
                 "hyperparams": dict(gamma=gamma, alpha=alpha, beta=beta, pos_frac=pos_frac),
             }, best_ckpt)
-            log.info("  ↑ new best val AUPRC=%.4f  saved → %s", best_auprc, best_ckpt)
+            log.info("  ↑ new best val F1=%.4f  saved → %s", best_f1, best_ckpt)
         else:
             # Only count non-improvement after warmup
             if epoch > warmup_epochs:
                 no_improve += 1
                 if no_improve >= patience:
                     log.info(
-                        "Early stopping at epoch %d (no AUPRC improvement for %d epochs)",
+                        "Early stopping at epoch %d (no val F1 improvement for %d epochs)",
                         epoch, patience,
                     )
                     break
@@ -446,11 +462,11 @@ def train(
         best_val_metrics = ckpt.get("val_metrics", {})
 
     log.info(
-        "Training complete. Best val AUPRC=%.4f  F2=%.4f",
-        best_auprc, best_val_metrics.get("best_f2", float("nan")),
+        "Training complete. Best val F1=%.4f  F2=%.4f",
+        best_f1, best_val_metrics.get("best_f2", float("nan")),
     )
     return {
-        "best_auprc": best_auprc,
+        "best_f1":    best_f1,
         "best_f2":    best_val_metrics.get("best_f2", float("nan")),
         "ckpt":       str(best_ckpt),
     }
@@ -534,6 +550,19 @@ def _parse_args() -> argparse.Namespace:
                    help="Input patch size (64 for our Phase 2 default, 128 for Gatti-mirror)")
     p.add_argument("--train-stride", default=None, type=int,
                    help="Training patch stride (default: patch_size//2 = 50% overlap)")
+    p.add_argument("--patience", default=20, type=int,
+                   help="Early-stop patience on val AUPRC (set >= epochs to disable).")
+    p.add_argument("--dec-dropout", default=0.0, type=float,
+                   help="Dropout probability in decoder blocks (default 0, no dropout).")
+    p.add_argument("--aug-strength", default=1.0, type=float,
+                   help="Augmentation strength multiplier (1.0=default, 2.0=2x stronger).")
+    p.add_argument("--n-reg", default=None, type=str,
+                   help="Comma-separated encoder channel counts, e.g. '12,24,48,48,48'")
+    p.add_argument("--warm-restarts", default=0, type=int,
+                   help="Number of cosine warm restarts (0=single cosine decay).")
+    p.add_argument("--loss-mode", default=None, type=str,
+                   choices=["bce", "focal_tversky", "dice", "bce_dice"],
+                   help="Override loss mode from ablation condition.")
     p.add_argument("--online-aug", action="store_true",
                    help="Enable off-D4 augmentation (affine + Gaussian noise + intensity)")
     p.add_argument("--wandb",       action="store_true", dest="use_wandb")
@@ -580,4 +609,10 @@ if __name__ == "__main__":
             patch_size=args.patch_size,
             train_stride=args.train_stride,
             online_aug=args.online_aug,
+            aug_strength=args.aug_strength,
+            patience=args.patience,
+            dec_dropout_p=args.dec_dropout,
+            n_reg=[int(x) for x in args.n_reg.split(",")] if args.n_reg else None,
+            warm_restarts=args.warm_restarts,
+            loss_mode=args.loss_mode,
         )

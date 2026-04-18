@@ -73,15 +73,26 @@ class OnlineAugment:
         aux_bias_range:      float = 0.05,
         p:                   float = 1.0,
         rng_seed:            int   = 0,
+        strength:            float = 1.0,
     ) -> None:
-        self.rot_deg             = rot_deg
-        self.shear_deg           = shear_deg
-        self.scale_range         = scale_range
-        self.translate_px        = translate_px
-        self.sar_noise_std       = sar_noise_std
-        self.sar_intensity_range = sar_intensity_range
-        self.aux_scale_range     = aux_scale_range
-        self.aux_bias_range      = aux_bias_range
+        s = strength
+        self.rot_deg             = rot_deg * s
+        self.shear_deg           = shear_deg * s
+        lo_s, hi_s = scale_range
+        half = (hi_s - lo_s) / 2.0 * s
+        mid  = (hi_s + lo_s) / 2.0
+        self.scale_range         = (mid - half, mid + half)
+        self.translate_px        = max(1, int(translate_px * s))
+        self.sar_noise_std       = sar_noise_std * s
+        lo_i, hi_i = sar_intensity_range
+        half_i = (hi_i - lo_i) / 2.0 * s
+        mid_i  = (hi_i + lo_i) / 2.0
+        self.sar_intensity_range = (mid_i - half_i, mid_i + half_i)
+        lo_a, hi_a = aux_scale_range
+        half_a = (hi_a - lo_a) / 2.0 * s
+        mid_a  = (hi_a + lo_a) / 2.0
+        self.aux_scale_range     = (mid_a - half_a, mid_a + half_a)
+        self.aux_bias_range      = aux_bias_range * s
         self.p                   = p
         self.gen                 = torch.Generator().manual_seed(rng_seed)
 

@@ -17,7 +17,8 @@
 #   - Balanced sampler pos_frac=0.5
 #   - Full off-D4 augmentation (affine + Gaussian noise + intensity)
 #   - BCE with pos_weight=3.0
-#   - 110 epochs, AdamW LR=1e-4, 10-epoch warmup + 100-epoch cosine
+#   - 110 epochs FLAT (no early stopping — Gatti trains fixed schedule)
+#   - AdamW LR=1e-4, 10-epoch warmup + 100-epoch cosine
 #   - Morph closing at inference, no TTA
 #   - Evaluated at F1-opt (Gaussian blending) and F2-opt (Max blending)
 #   - 1 seed (matching Gatti)
@@ -30,8 +31,8 @@ DATA_DIR=/mmfs1/gscratch/scrubbed/sanmarco/equivariant-sar/data/raw
 STATS=$REPO/data/norm_stats_12ch.json
 SIF=/mmfs1/gscratch/scrubbed/sanmarco/pytorch_24.12-py3.sif
 SEED=${SEED:-0}
-OUT_DIR=$REPO/checkpoints_gatti_mirror
-EVAL_DIR=$REPO/results_gatti_mirror
+OUT_DIR=$REPO/checkpoints_gatti_mirror_full
+EVAL_DIR=$REPO/results_gatti_mirror_full
 mkdir -p "$OUT_DIR" "$EVAL_DIR"
 
 CKPT=$OUT_DIR/best_cond2_seed${SEED}.pt
@@ -56,6 +57,7 @@ else
             --train-stride 64 \
             --online-aug \
             --epochs 110 \
+            --patience 999 \
             --warmup-epochs 10 \
             --batch-size 32 \
             --lr 1e-4 \

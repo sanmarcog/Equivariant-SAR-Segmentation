@@ -113,17 +113,16 @@ class CopyPasteAugment:
             src_idx = int(self.rng.choice(src_pool))
             src = self.dataset[src_idx]
 
-            src_mask = src["mask"][0].numpy().astype(bool)   # [64, 64]
+            src_mask = src["mask"][0].numpy().astype(bool)
             if src_mask.sum() == 0:
                 continue
 
             # Paste at a random offset that keeps deposit in-bounds
-            # Find deposit bounding box
             rows = np.where(src_mask.any(axis=1))[0]
             cols = np.where(src_mask.any(axis=0))[0]
             dep_h = rows[-1] - rows[0] + 1
             dep_w = cols[-1] - cols[0] + 1
-            P = 64
+            P = tgt["patch"].shape[-1]
 
             if dep_h >= P or dep_w >= P:
                 continue   # deposit larger than patch — skip
@@ -146,7 +145,7 @@ class CopyPasteAugment:
 
             # Build alpha mask (Gaussian blending)
             alpha = _make_alpha_mask(new_mask, sigma=self.sigma)   # [64, 64]
-            alpha_t = torch.from_numpy(alpha).unsqueeze(0)          # [1, 64, 64]
+            alpha_t = torch.from_numpy(alpha).unsqueeze(0)          # [1, P, P]
 
             # Blend 12-channel patches
             # Align the source patch crop to the deposit bounding box
@@ -160,7 +159,7 @@ class CopyPasteAugment:
                 rows[0]:rows[-1]+1,
                 cols[0]:cols[-1]+1,
             ]
-            src_crop_t = torch.from_numpy(src_crop)  # [12, 64, 64]
+            src_crop_t = torch.from_numpy(src_crop)  # [12, P, P]
 
             tgt["patch"] = alpha_t * src_crop_t + (1 - alpha_t) * tgt["patch"]
             # Hard-OR the mask (deposit pixels always labelled 1)
