@@ -200,20 +200,25 @@ def train_epoch(
             if online_aug is not None:
                 samples = [online_aug(s) for s in samples]
             batch = {
-                "patch":  torch.stack([s["patch"] for s in samples]),
-                "mask":   torch.stack([s["mask"]  for s in samples]),
-                "scene":  [s["scene"]  for s in samples],
-                "region": [s["region"] for s in samples],
-                "pos_i":  [s["pos_i"]  for s in samples],
-                "pos_j":  [s["pos_j"]  for s in samples],
+                "patch":     torch.stack([s["patch"] for s in samples]),
+                "mask":      torch.stack([s["mask"]  for s in samples]),
+                "scene":     [s["scene"]  for s in samples],
+                "region":    [s["region"] for s in samples],
+                "pos_i":     [s["pos_i"]  for s in samples],
+                "pos_j":     [s["pos_j"]  for s in samples],
             }
+            if "comp_size" in samples[0]:
+                batch["comp_size"] = torch.stack([s["comp_size"] for s in samples])
 
         patch = batch["patch"].to(device, non_blocking=True)   # [B, 12, 64, 64]
         mask  = batch["mask"].to(device, non_blocking=True)    # [B, 1, 64, 64]
+        comp_size = batch.get("comp_size")
+        if comp_size is not None:
+            comp_size = comp_size.to(device, non_blocking=True)
 
         optimizer.zero_grad()
         out    = model(patch)
-        losses = criterion(out["logit"], mask, out["area_m2"])
+        losses = criterion(out["logit"], mask, out["area_m2"], comp_size=comp_size)
         losses["loss"].backward()
         torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
         optimizer.step()
@@ -308,6 +313,10 @@ def train(
     n_reg:      list[int] | None = None,
     warm_restarts: int  = 0,
     loss_mode:  str | None = None,
+    small_thr:  int     = 10,
+    large_thr:  int     = 30,
+    boundary_weight: float = 0.4,
+    balance_weight:  float = 1.0,
 ) -> dict:
     """
     Train one model (one ablation condition + one seed).
@@ -339,6 +348,8 @@ def train(
         gamma=gamma, alpha=alpha, beta=beta,
         mode=cfg["mode"],
         pos_weight=pos_weight,
+        small_thr=small_thr, large_thr=large_thr,
+        boundary_weight=boundary_weight, balance_weight=balance_weight,
     ).to(device)
 
     # ── Copy-paste augmentation ────────────────────────────────────────
@@ -561,8 +572,16 @@ def _parse_args() -> argparse.Namespace:
     p.add_argument("--warm-restarts", default=0, type=int,
                    help="Number of cosine warm restarts (0=single cosine decay).")
     p.add_argument("--loss-mode", default=None, type=str,
-                   choices=["bce", "focal_tversky", "dice", "bce_dice"],
+                   choices=["bce", "focal_tversky", "dice", "bce_dice", "component_iou", "component_iou_dice"],
                    help="Override loss mode from ablation condition.")
+    p.add_argument("--small-thr", default=10, type=int,
+                   help="Max component size (pixels) for small-component IoU regime.")
+    p.add_argument("--large-thr", default=30, type=int,
+                   help="Min component size (pixels) for large-component boundary downweight.")
+    p.add_argument("--boundary-weight", default=0.4, type=float,
+                   help="Weight for boundary pixels in large components.")
+    p.add_argument("--balance-weight", default=1.0, type=float,
+                   help="Relative weight of small-component IoU vs pixel loss.")
     p.add_argument("--online-aug", action="store_true",
                    help="Enable off-D4 augmentation (affine + Gaussian noise + intensity)")
     p.add_argument("--wandb",       action="store_true", dest="use_wandb")
@@ -615,4 +634,8 @@ if __name__ == "__main__":
             n_reg=[int(x) for x in args.n_reg.split(",")] if args.n_reg else None,
             warm_restarts=args.warm_restarts,
             loss_mode=args.loss_mode,
+            small_thr=args.small_thr,
+            large_thr=args.large_thr,
+            boundary_weight=args.boundary_weight,
+            balance_weight=args.balance_weight,
         )

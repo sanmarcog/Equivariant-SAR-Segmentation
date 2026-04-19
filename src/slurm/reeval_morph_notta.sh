@@ -23,7 +23,7 @@ REPO=/mmfs1/gscratch/scrubbed/sanmarco/equivariant-sar-seg
 DATA_DIR=/mmfs1/gscratch/scrubbed/sanmarco/equivariant-sar/data/raw
 STATS=$REPO/data/norm_stats_12ch.json
 SIF=/mmfs1/gscratch/scrubbed/sanmarco/pytorch_24.12-py3.sif
-OUT_DIR=$REPO/results_v2
+OUT_DIR=${OUT_DIR:-$REPO/results_v2}
 
 mkdir -p "$OUT_DIR"
 

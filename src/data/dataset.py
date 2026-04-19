@@ -35,6 +35,8 @@ import numpy as np
 import torch
 from torch.utils.data import Dataset, Sampler
 
+from scipy.ndimage import label as ndi_label
+
 from src.data.preprocess import preprocess_scene, load_gt_mask
 
 log = logging.getLogger(__name__)
@@ -73,11 +75,22 @@ PATCH_STRIDE_INFER = 16   # 75% overlap at inference (in inference.py)
 # Scene cache (load once, share across splits)
 # ---------------------------------------------------------------------------
 
+def _build_component_size_map(mask: np.ndarray) -> np.ndarray:
+    """
+    For each positive pixel, label it with the pixel count of its connected component.
+    Background pixels get 0. Uses 8-connectivity.
+    """
+    labeled, n_comps = ndi_label(mask > 0.5)
+    comp_sizes = np.bincount(labeled.ravel())
+    comp_sizes[0] = 0
+    return comp_sizes[labeled].astype(np.float32)
+
+
 class _SceneCache:
-    """Loads and caches preprocessed scene arrays + GT masks."""
+    """Loads and caches preprocessed scene arrays + GT masks + component-size maps."""
 
     def __init__(self, data_dir: Path, scene_names: list[str], stats: dict):
-        self._scenes: dict[str, tuple[np.ndarray, np.ndarray]] = {}
+        self._scenes: dict[str, tuple[np.ndarray, np.ndarray, np.ndarray]] = {}
         mean = np.array(stats["mean"], dtype=np.float32).reshape(-1, 1, 1)
         std  = np.array(stats["std"],  dtype=np.float32).reshape(-1, 1, 1)
         for name in scene_names:
@@ -86,10 +99,11 @@ class _SceneCache:
             arr12 = preprocess_scene(scene_dir)          # [12, H, W]
             arr12 = (arr12 - mean) / std                  # z-score normalise
             mask  = load_gt_mask(scene_dir).astype(np.float32)   # [H, W]
-            self._scenes[name] = (arr12, mask)
+            comp_size = _build_component_size_map(mask)   # [H, W]
+            self._scenes[name] = (arr12, mask, comp_size)
             log.info("  shape=%s  deposit_frac=%.4f", arr12.shape, mask.mean())
 
-    def get(self, name: str) -> tuple[np.ndarray, np.ndarray]:
+    def get(self, name: str) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
         return self._scenes[name]
 
     def names(self) -> list[str]:
@@ -113,7 +127,7 @@ def _build_patch_index(
     """
     records = []
     for scene_name in scene_cache.names():
-        _, mask = scene_cache.get(scene_name)
+        _, mask, _ = scene_cache.get(scene_name)
         H, W = mask.shape
         for i in range(0, H - patch_size + 1, stride):
             for j in range(0, W - patch_size + 1, stride):
@@ -191,20 +205,22 @@ class SegmentationDataset(Dataset):
 
     def __getitem__(self, idx: int) -> dict:
         rec = self.records[idx]
-        arr12, mask = self.scene_cache.get(rec["scene"])
+        arr12, mask, comp_size = self.scene_cache.get(rec["scene"])
 
         i, j = rec["pos_i"], rec["pos_j"]
         p = self.patch_size
         patch = arr12[:, i:i+p, j:j+p].copy()    # [12, P, P]
         pmask = mask[i:i+p, j:j+p].copy()         # [P, P]
+        pcomp = comp_size[i:i+p, j:j+p].copy()    # [P, P]
 
         sample = {
-            "patch":  torch.from_numpy(patch),
-            "mask":   torch.from_numpy(pmask).unsqueeze(0),   # [1, 64, 64]
-            "scene":  rec["scene"],
-            "region": _REGION.get(rec["scene"], "unknown"),
-            "pos_i":  i,
-            "pos_j":  j,
+            "patch":      torch.from_numpy(patch),
+            "mask":       torch.from_numpy(pmask).unsqueeze(0),    # [1, P, P]
+            "comp_size":  torch.from_numpy(pcomp).unsqueeze(0),    # [1, P, P]
+            "scene":      rec["scene"],
+            "region":     _REGION.get(rec["scene"], "unknown"),
+            "pos_i":      i,
+            "pos_j":      j,
         }
 
         if self.transform is not None:

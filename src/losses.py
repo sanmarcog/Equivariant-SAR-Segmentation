@@ -150,6 +150,104 @@ def bce_loss(
 
 
 # ---------------------------------------------------------------------------
+# Per-component IoU loss
+# ---------------------------------------------------------------------------
+
+class ComponentIoULoss(nn.Module):
+    """
+    Per-instance soft-Dice/IoU loss computed independently for each connected
+    component in the ground truth mask. Background gets standard BCE.
+
+    L = BCE(all pixels) + λ * mean(per_component_soft_dice)
+
+    The per-component term naturally handles scale: small components get high
+    Dice from partial overlap, large components need precise boundaries.
+
+    Args:
+        lam:        weight of per-component IoU term relative to BCE
+        pos_weight: BCE pos_weight
+        eps:        label smoothing for BCE
+        bbox_dilation: pixels to dilate component bbox for prediction crop
+    """
+
+    def __init__(
+        self,
+        lam:            float = 1.0,
+        pos_weight:     float = 1.0,
+        eps:            float = 0.05,
+        bbox_dilation:  int   = 3,
+        use_dice_global: bool = False,
+    ) -> None:
+        super().__init__()
+        self.lam             = lam
+        self.pos_weight      = pos_weight
+        self.eps             = eps
+        self.bbox_dilation   = bbox_dilation
+        self.use_dice_global = use_dice_global
+
+    def _per_component_dice(
+        self, logit: torch.Tensor, mask: torch.Tensor,
+    ) -> torch.Tensor:
+        from scipy.ndimage import label as _ndi_label
+
+        prob = torch.sigmoid(logit)
+        B = logit.shape[0]
+        H, W = logit.shape[-2], logit.shape[-1]
+        d = self.bbox_dilation
+        dice_losses = []
+
+        for b in range(B):
+            m = mask[b, 0]
+            p = prob[b, 0]
+
+            pos_np = (m > 0.5).cpu().numpy()
+            if not pos_np.any():
+                continue
+
+            labeled, n_comps = _ndi_label(pos_np)
+            labeled_t = torch.from_numpy(labeled).to(logit.device)
+
+            for comp_id in range(1, n_comps + 1):
+                comp_pixels = labeled_t == comp_id
+                rows = torch.where(comp_pixels.any(dim=1))[0]
+                cols = torch.where(comp_pixels.any(dim=0))[0]
+                if len(rows) == 0:
+                    continue
+
+                r0 = max(0, rows[0].item() - d)
+                r1 = min(H, rows[-1].item() + 1 + d)
+                c0 = max(0, cols[0].item() - d)
+                c1 = min(W, cols[-1].item() + 1 + d)
+
+                gt_crop = m[r0:r1, c0:c1]
+                pred_crop = p[r0:r1, c0:c1]
+
+                intersection = (pred_crop * gt_crop).sum()
+                union = pred_crop.sum() + gt_crop.sum()
+                dice = (2.0 * intersection + 1.0) / (union + 1.0)
+                dice_losses.append(1.0 - dice)
+
+        if not dice_losses:
+            return logit.sum() * 0.0
+        return torch.stack(dice_losses).mean()
+
+    def forward(
+        self,
+        logit:     torch.Tensor,   # [B, 1, H, W]
+        target:    torch.Tensor,   # [B, 1, H, W] binary 0/1
+        comp_size: torch.Tensor | None = None,  # unused, kept for interface compat
+    ) -> torch.Tensor:
+        target_smooth = smooth_labels(target, self.eps)
+        if self.use_dice_global:
+            l_global = dice_loss(logit, target_smooth)
+        else:
+            pw = torch.tensor([self.pos_weight], device=logit.device)
+            l_global = F.binary_cross_entropy_with_logits(logit, target_smooth, pos_weight=pw)
+        l_comp = self._per_component_dice(logit, target)
+        return l_global + self.lam * l_comp
+
+
+# ---------------------------------------------------------------------------
 # Combined segmentation loss
 # ---------------------------------------------------------------------------
 
@@ -162,7 +260,7 @@ class SegLoss(nn.Module):
         alpha:   Tversky FP weight (default 0.3; grid: {0.3, 0.2})
         beta:    Tversky FN weight (default 0.7; grid: {0.7, 0.8})
         eps:     Label smoothing ε (default 0.05)
-        mode:    'focal_tversky' (conditions 3–5) | 'bce' (condition 1–2)
+        mode:    'focal_tversky' | 'bce' | 'dice' | 'bce_dice' | 'size_adaptive'
     """
 
     def __init__(
@@ -173,6 +271,10 @@ class SegLoss(nn.Module):
         eps:        float = 0.05,
         mode:       str   = "focal_tversky",
         pos_weight: float = 3.0,
+        small_thr:  int   = 10,
+        large_thr:  int   = 30,
+        boundary_weight: float = 0.4,
+        balance_weight:  float = 1.0,
     ) -> None:
         super().__init__()
         self.gamma      = gamma
@@ -182,11 +284,21 @@ class SegLoss(nn.Module):
         self.mode       = mode
         self.pos_weight = pos_weight
 
+        if mode in ("component_iou", "component_iou_dice"):
+            self.component_iou = ComponentIoULoss(
+                lam=balance_weight, pos_weight=pos_weight, eps=eps,
+                use_dice_global=(mode == "component_iou_dice"),
+            )
+
     def forward(
         self,
-        logit:  torch.Tensor,   # [B, 1, H, W]
-        target: torch.Tensor,   # [B, 1, H, W] raw binary mask (0/1)
+        logit:     torch.Tensor,   # [B, 1, H, W]
+        target:    torch.Tensor,   # [B, 1, H, W] raw binary mask (0/1)
+        comp_size: torch.Tensor | None = None,  # [B, 1, H, W] component sizes
     ) -> torch.Tensor:
+        if self.mode in ("component_iou", "component_iou_dice"):
+            return self.component_iou(logit, target)
+
         target_smooth = smooth_labels(target, self.eps)
 
         if self.mode == "bce":
@@ -263,10 +375,16 @@ class CombinedLoss(nn.Module):
         mode:        str   = "focal_tversky",
         lambda_area: float = 0.1,
         pos_weight:  float = 3.0,
+        small_thr:   int   = 10,
+        large_thr:   int   = 30,
+        boundary_weight: float = 0.4,
+        balance_weight:  float = 1.0,
     ) -> None:
         super().__init__()
         self.seg_loss  = SegLoss(
             gamma=gamma, alpha=alpha, beta=beta, eps=eps, mode=mode, pos_weight=pos_weight,
+            small_thr=small_thr, large_thr=large_thr,
+            boundary_weight=boundary_weight, balance_weight=balance_weight,
         )
         self.area_loss = AreaLoss()
         self.lambda_area = lambda_area
@@ -276,8 +394,9 @@ class CombinedLoss(nn.Module):
         logit:       torch.Tensor,    # [B, 1, H, W]
         target:      torch.Tensor,    # [B, 1, H, W] binary mask
         area_m2:     torch.Tensor,    # [B, 1] predicted area from model
+        comp_size:   torch.Tensor | None = None,  # [B, 1, H, W]
     ) -> dict[str, torch.Tensor]:
-        l_seg  = self.seg_loss(logit, target)
+        l_seg  = self.seg_loss(logit, target, comp_size=comp_size)
         l_area = self.area_loss(area_m2, target)
         total  = l_seg + self.lambda_area * l_area
 

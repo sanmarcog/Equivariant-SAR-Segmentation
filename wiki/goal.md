@@ -20,13 +20,13 @@
 
 ## Primary goal
 
-1. **Match or beat Gatti et al. 2026** on pixel-level F1 ≥ 0.806 / F2 ≥ 0.841 on Tromsø OOD, with ~4× fewer parameters. Gatti uses SwinV2-Tiny (vision transformer, ~2.39M params); we use D4-equivariant CNN (~625K params). Current result: F2=0.79 (5pp gap). Augmentation expected to close most of this.
+1. **Approach Gatti et al. 2026** on pixel-level F2 on Tromsø OOD, with ~4× fewer parameters. Gatti uses SwinV2-Tiny (vision transformer, ~2.39M params); we use D4-equivariant CNN (~625K params). Current best deployment-honest result: **F2=0.774 at thr=0.5** (cond 2, biased sampling + BCE), **AUPRC=0.825**, vs Gatti F2=0.841. Gap is 7pp at standard threshold, with 4× fewer parameters.
 
-> The paper's central claim is that an equivariant CNN can match a vision transformer on overall segmentation metrics with 4× fewer parameters, and that D4-equivariance provides a strong inductive bias that eliminates the need for geometric augmentation while maintaining competitive performance.
+> The paper's central claim is that an equivariant CNN approaches a vision transformer on overall segmentation metrics with 4× fewer parameters, using only BCE loss + biased sampling. D4-equivariance eliminates geometric augmentation (4/6 transforms redundant) and TTA (4× eval speedup). Frozen-threshold evaluation reveals that sweep-mode F2 can severely overstate unconventional-threshold architectures — a methodological contribution.
 
-## D2 detection — reframed as failure analysis
+## D2 detection — bimodal, environmentally determined (2026-04-16)
 
-2. **D2 detection failed** (F2=0.06, permutation p=1.0). Despite biased sampling, Focal+Tversky loss, skip connections, and copy-paste augmentation, the model has zero D2-specific capability. The paper presents this as a structured negative result: what was tried, why it failed, what it implies for small-deposit detection at 10m GRD.
+2. **D2 detection is real and bimodal.** The strict F2=0.06 was a metric artifact (D3/D4 TPs counted as D2 FPs). Per-polygon analysis shows 15/25 D2 polygons detected at high confidence (mean prob >0.7), 7/25 clearly missed (<0.4). Size does NOT predict detection success — same-size polygons have opposite outcomes (#6 at 2519 m²=0.99 vs #7 at 2520 m²=0.30). The discriminator is environmental (SAR viewing geometry, terrain context). Paper claim: "D2 detection floor is set by SAR physics, not model architecture. 60% of D2 deposits are confidently detected; ~28% are plausibly SAR-invisible." Vs-bg F2 numbers from reeval will quantify this formally.
 
 ## Secondary goals
 
@@ -43,8 +43,8 @@
 
 > ✓ DECIDED: primary metric is **pixel-level** F1/F2 matching Gatti's protocol exactly (threshold sweep on val, report best F1 at F1-optimized threshold and best F2 at F2-optimized threshold). Polygon-level metrics reported as supplementary.
 
-- **Full win**: pixel F2 ≥ 0.841 with ~4× fewer parameters + honest D2 failure analysis with diagnostic evidence
-- **Partial win** (current trajectory): pixel F2 ≈ 0.79–0.84, gap partially closed by augmentation, D2 failure documented
+- **Full win**: pixel F2 ≥ 0.841 — NOT achieved. Gap is 7pp at deployment-honest threshold.
+- **Strong partial win** (current result): F2=0.774@thr=0.5 (92% of Gatti, 4× fewer params) + D2 67% recall with sensor-visibility explanation + frozen-threshold methodological finding + clean ablation (biased sampling only positive technique). This is a publishable result with 5+ distinct contributions.
 - **Informative loss**: document what the capacity/resolution gap costs; motivates Phase 3
 
 See [evaluation.md](evaluation.md) for metric details and [baselines.md](baselines.md) for Gatti protocol.

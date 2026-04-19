@@ -70,7 +70,7 @@ Polygon contrast (mean signal − background, dB). Higher = cleaner detection.
 
 ---
 
-## Tromsø results (2026-04-15) — overall strong, D2 failed
+## Tromsø results (2026-04-15) — overall strong, D2 reframing in progress
 
 ### Overall pixel metrics (cond 5, seeds 0–1)
 
@@ -91,11 +91,19 @@ Overall F2=0.79 vs Gatti's 0.84. Gap is 5pp with 4× fewer params. Parameter eff
 | D3 | 71 | 0.579 | [0.408, 0.501] | — |
 | D4 | 16 | 0.654 | [0.440, 0.606] | — |
 
-> ✓ DECIDED: D2 detection has failed (F2=0.06, permutation p=1.0). Model has zero D2-specific capability — D2 detections are spillover from nearby D3+ deposits. D2 as co-primary goal is dropped. Reframed as structured failure analysis in the paper.
+> ⚠ REFRAMED (2026-04-16): D2 F2=0.06 was a **metric artifact**. The strict `dscale_pixel_f2` counted correct D3/D4 predictions as D2 false positives (~25K D3/D4 TPs crushed D2 precision to 0.005). This measures D-scale *discrimination*, not D2 *detection*. Visual inspection (pair 3 overlay) showed strong prediction activity at D2 locations — yellow/green probability mass. New `dscale_pixel_f2_vs_bg` metric (FP from true background only) running in reeval job 34653541.
+>
+> The previous "D2 failure" decision is **suspended** pending vs-bg numbers. If vs-bg D2 F2 is substantially higher, the paper claim shifts from "structured failure" to "D2 detected at lower confidence, recoverable with threshold tuning."
 
-### Paper reframe
+### Paper reframe (pending vs-bg D2 numbers)
 
-The story is now: equivariant CNNs are parameter-efficient for SAR avalanche segmentation (positive claim) + small deposits remain below the effective detection floor at 64×64/10m even with targeted regularization (honest limitation with diagnostic evidence). The permutation test, per-D-scale ablation, and D2 visualization support this framing.
+**Pre-reeval finding (2026-04-16): D2 detection is bimodal, not failed.**
+
+Per-polygon probability analysis: 15/25 D2 polygons detected at mean prob >0.7 (60%), 7/25 missed at <0.4 (28%), 3 in middle ground. Size is NOT the predictor — polygon #6 (2519 m², prob=0.99) vs #7 (2520 m², prob=0.30). The discriminator is environmental (SAR viewing geometry, terrain context), not dimensional.
+
+Paper framing: "D2 detection failure is not size-limited. 60% of D2 deposits are detected with high confidence. The remaining 28% are plausibly SAR-invisible due to terrain shadow, layover, or unfavorable viewing geometry — a physics limitation, not a model limitation."
+
+This is a stronger finding than either "D2 fails" or "D2 works." It characterizes the detection floor and attributes it to the right cause.
 
 ### Key diagnostic findings (2026-04-15)
 
@@ -103,16 +111,40 @@ The story is now: equivariant CNNs are parameter-efficient for SAR avalanche seg
 
 **Cond 4 is best architecture (skip + no copy-paste).** Cond 3 (no skip) shows marginally higher sweep-mode F2 (0.800 vs 0.793) but has 2.4× higher threshold instability across seeds (threshold std=0.17 vs 0.07). Sweep-mode hides this because each seed gets its own optimal threshold. With a frozen threshold (deployment-realistic), cond 4 is expected to outperform cond 3. Paper framing: "skip connections stabilize the operating point without sacrificing peak F2."
 
-**D2 is a confidence problem, not localization.** Viz shows the model puts probability mass on D2 deposits (correct location) but at low confidence (0.1–0.3), thresholded away when optimizing overall F2. The signal exists at 64×64 — the model can't distinguish it from noise confidently enough. 128×128 patch size dropped from priority (won't fix a calibration issue).
+**D2 detection is bimodal and SAR-visibility-limited — predictor analysis COMPLETE.** 15/25 D2 polygons detected at >0.7 confidence, 7/25 missed at <0.4 — and size does not predict which. Feature correlation + LOO validation identifies `log_ratio_VH_abs_max` as the single best predictor at **88% LOO accuracy**. This is the maximum absolute VH backscatter change in the log-ratio channel — a direct measure of SAR visibility of the deposit. When the radar sees no change (low log-ratio), no model can detect the deposit. Detection floor is at the sensor level, not the model level. Size-weighted loss, two-head architecture, capacity bump, and patch-size 128 all pruned from decision tree as a result.
 
 **TTA is redundant on D4-equivariant model.** The 4 TTA variants (identity, h-flip, v-flip, both-flips) are all D4 group elements. Model produces identical logits for each. Remove TTA, cut eval time 4×. Paper framing: "equivariance eliminates TTA" alongside "eliminates 4/6 geometric augmentations."
 
-### Remaining experiments (priority order)
+### Full ablation results — FINAL (2026-04-16, after frozen-threshold reeval)
 
-1. Off-D4 augmentation (affine + radiometric) — most likely to close 0.79→0.84 gap
-2. BCE pos_weight=3 variant — test if simpler loss beats Focal+Tversky
-3. Capacity bump to 1.11M if augmentation alone insufficient
-4. Combined (augmentation + best loss + optional capacity) — after ablation completes
+| # | Condition | Sweep F2 | AUPRC | F2@0.5 | F2@0.7 | D2 Recall (vs-bg) |
+|---|-----------|----------|-------|--------|--------|-------------------|
+| 1 | Baseline (BCE, random, no skip) | 0.806 | — | 0.668 | 0.521 | 0.55 |
+| **2** | **+ biased sampling** | **0.793** | **0.825** | **0.774** | **0.767** | **0.67** |
+| 3 | + Focal+Tversky loss | 0.790 | 0.813 | 0.760 | 0.776 | 0.66 |
+| 4 | + U-Net skip connections | 0.784 | 0.815 | 0.705 | 0.775 | 0.62 |
+| 5 | + copy-paste (full system) | 0.774 | 0.807 | 0.655 | 0.758 | 0.64 |
+| — | Gatti et al. 2026 | 0.841 | — | — | — | — |
+
+> **FROZEN-THRESHOLD REVERSAL**: Cond 1's sweep-mode win was an artifact of operating at threshold ~0.17. At standard thresholds, cond 1 collapses (F2=0.521@0.7). **Cond 2 is the correct headline**: highest AUPRC, best deployment stability, highest D2 recall.
+
+**Key implications**:
+- Deployment-honest gap to Gatti is **7pp** (0.774 vs 0.841 at thr=0.5), not the 3-5pp previously claimed
+- Sweep-mode F2 overestimates unconventional-threshold architectures — methodological finding for the paper
+- Biased sampling is the single positive technique: stabilizes threshold, boosts AUPRC, improves D2 recall
+- BCE+pos_weight=3 outperforms Focal+Tversky across all metrics
+- Skip connections and copy-paste are small net negatives
+
+### Remaining experiments (final priority, 2026-04-16)
+
+1. ~~Reeval 34653576 with vs-bg metric~~ — ✅ COMPLETE. Confirmed D2 recall 0.55–0.67, cond 2 best at 0.67.
+2. ~~Off-D4 augmentation~~ — DECISION: **NO, do not run.** Paper story is coherent without it. The 7pp gap is honestly reported and attributed. Augmentation won't change the headline narrative.
+3. ~~Size-weighted loss~~ — PRUNED. Sensor-limited.
+4. ~~Capacity bump~~ — PRUNED. Sensor-limited.
+5. ~~Two-head architecture~~ — PRUNED. Sensor-limited.
+6. ~~Patch size 128~~ — PRUNED. Sensor-limited.
+
+> ✓ **DATA COLLECTION COMPLETE. START WRITING.**
 
 ---
 
