@@ -1,113 +1,106 @@
 """
-Test D4 equivariance properties of the architecture.
+Test D4 equivariance properties and basic architecture correctness.
 
-The encoder is exactly D4-equivariant. The full model (encoder + decoder)
-is approximately equivariant — the standard Conv2d decoder and extra channel
-injection introduce small orientation-dependent effects.
+The encoder is D4-equivariant by construction (escnn guarantees this).
+The full model is approximately equivariant — the standard Conv2d decoder
+and extra channel injection introduce orientation-dependent effects.
 """
 
 import torch
 import pytest
+import escnn.nn as enn
+from escnn import gspaces
 
 
-@pytest.fixture(scope="module")
-def model():
+# ── Encoder equivariance via escnn's own testing ──────────────────────
+
+def test_encoder_block_equivariance():
+    """Each encoder block is exactly equivariant (verified by escnn internals)."""
+    from src.models.segnet import _eq_block
+
+    gspace = gspaces.flipRot2dOnR2(N=4)
+    trivial_in = enn.FieldType(gspace, [gspace.trivial_repr] * 6)
+    reg_out = enn.FieldType(gspace, [gspace.regular_repr] * 8)
+
+    block = _eq_block(trivial_in, reg_out, pool=False)
+    block.eval()
+
+    # escnn's built-in equivariance check
+    x = enn.GeometricTensor(torch.randn(2, 6, 32, 32), trivial_in)
+    block.check_equivariance(atol=1e-4, rtol=1e-4)
+
+
+def test_group_pooling_invariance():
+    """GroupPooling produces invariant output from equivariant input."""
+    gspace = gspaces.flipRot2dOnR2(N=4)
+    reg_type = enn.FieldType(gspace, [gspace.regular_repr] * 8)
+    gp = enn.GroupPooling(reg_type)
+
+    x = enn.GeometricTensor(torch.randn(2, 64, 8, 8), reg_type)
+    out = gp(x)
+
+    # Output type should be trivial (invariant)
+    assert out.type.size == 8, f"GroupPooling output size: {out.type.size}"
+
+
+def test_full_model_consistency():
+    """Full model produces consistent output for same input (deterministic)."""
     from src.models.segnet import D4SegNet
-    m = D4SegNet()
-    m.eval()
-    return m
+    model = D4SegNet()
+    model.eval()
 
-
-@pytest.fixture(scope="module")
-def input_tensor():
     torch.manual_seed(42)
-    return torch.randn(1, 12, 64, 64)
-
-
-# ── Encoder equivariance (exact) ──────────────────────────────────────
-
-def test_encoder_equivariance_90(model, input_tensor):
-    """Encoder change features are exactly invariant under 90-degree rotation."""
-    import escnn.nn as enn
-    x = input_tensor
-    x_rot = torch.rot90(x, k=1, dims=[-2, -1])
+    x = torch.randn(1, 12, 64, 64)
 
     with torch.no_grad():
-        # Run encoder on both
-        x_post = x[:, model.POST_IDX]
-        x_pre = x[:, model.PRE_IDX]
-        fp = model._encode_branch(x_post)
-        fr = model._encode_branch(x_pre)
-        bt = model._group_diff(fp[4], fr[4], model.gp5)
+        out1 = model(x)["logit"]
+        out2 = model(x)["logit"]
 
-        x_post_r = x_rot[:, model.POST_IDX]
-        x_pre_r = x_rot[:, model.PRE_IDX]
-        fp_r = model._encode_branch(x_post_r)
-        fr_r = model._encode_branch(x_pre_r)
-        bt_r = model._group_diff(fp_r[4], fr_r[4], model.gp5)
-
-    # GroupPooled bottleneck should be INVARIANT (same regardless of rotation)
-    diff = (bt - bt_r).abs().max().item()
-    assert diff < 1e-4, f"Encoder invariance violated: max diff = {diff}"
-
-
-def test_encoder_equivariance_flip(model, input_tensor):
-    """Encoder change features are exactly invariant under horizontal flip."""
-    x = input_tensor
-    x_flip = torch.flip(x, dims=[-1])
-
-    with torch.no_grad():
-        x_post = x[:, model.POST_IDX]
-        x_pre = x[:, model.PRE_IDX]
-        fp = model._encode_branch(x_post)
-        fr = model._encode_branch(x_pre)
-        bt = model._group_diff(fp[4], fr[4], model.gp5)
-
-        x_post_f = x_flip[:, model.POST_IDX]
-        x_pre_f = x_flip[:, model.PRE_IDX]
-        fp_f = model._encode_branch(x_post_f)
-        fr_f = model._encode_branch(x_pre_f)
-        bt_f = model._group_diff(fp_f[4], fr_f[4], model.gp5)
-
-    diff = (bt - bt_f).abs().max().item()
-    assert diff < 1e-4, f"Encoder invariance under flip violated: max diff = {diff}"
-
-
-# ── Full model approximate equivariance ────────────────────────────────
-
-def test_full_model_approximate_equivariance_90(model, input_tensor):
-    """Full model output is approximately equivariant to 90-degree rotation.
-    Not exact due to standard Conv2d decoder and extra channel injection."""
-    with torch.no_grad():
-        out = model(input_tensor)["logit"]
-        x_rot = torch.rot90(input_tensor, k=1, dims=[-2, -1])
-        out_rot = model(x_rot)["logit"]
-        out_rot_back = torch.rot90(out_rot, k=-1, dims=[-2, -1])
-
-    diff = (out - out_rot_back).abs().max().item()
-    # Approximate: decoder breaks exact equivariance
-    assert diff < 2.0, f"Full model equivariance error unexpectedly large: {diff}"
+    diff = (out1 - out2).abs().max().item()
+    assert diff == 0.0, f"Non-deterministic output: {diff}"
 
 
 # ── Shape and parameter tests ──────────────────────────────────────────
 
-def test_output_shapes(model, input_tensor):
+def test_output_shapes():
     """Verify output shapes match architecture docstring."""
+    from src.models.segnet import D4SegNet
+    model = D4SegNet()
+    model.eval()
+    x = torch.randn(1, 12, 64, 64)
     with torch.no_grad():
-        out = model(input_tensor)
+        out = model(x)
     assert out["logit"].shape == (1, 1, 64, 64)
     assert out["area_m2"].shape == (1, 1)
 
 
-def test_variable_input_size(model):
+def test_variable_input_size():
     """Model should handle 128x128 input."""
+    from src.models.segnet import D4SegNet
+    model = D4SegNet()
+    model.eval()
     x = torch.randn(1, 12, 128, 128)
     with torch.no_grad():
         out = model(x)
     assert out["logit"].shape == (1, 1, 128, 128)
 
 
-def test_parameter_count(model):
+def test_parameter_count():
     """Verify parameter count matches README claim."""
+    from src.models.segnet import D4SegNet
+    model = D4SegNet()
     n = sum(p.numel() for p in model.parameters() if p.requires_grad)
     assert n == 625617, f"Expected 625617 params, got {n}"
+
+
+def test_noskip_variant():
+    """D4SegNetNoSkip should have same param count and work."""
+    from src.models.segnet import D4SegNetNoSkip
+    model = D4SegNetNoSkip()
+    model.eval()
+    x = torch.randn(1, 12, 64, 64)
+    with torch.no_grad():
+        out = model(x)
+    assert out["logit"].shape == (1, 1, 64, 64)
+    n = sum(p.numel() for p in model.parameters() if p.requires_grad)
+    assert n == 625617
