@@ -25,4 +25,4 @@ jobs:
           pip install "escnn>=0.1.9" scipy numpy pytest
 
       - name: Run tests
-        run: pytest tests/ -v
+        run: PYTHONPATH=. pytest tests/ -v
