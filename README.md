@@ -10,9 +10,9 @@ This project builds a pixel-level avalanche debris segmentation model from bi-te
 - **[Phase 1](https://github.com/sanmarcog/Equivariant-CNN-SAR)** — patch-level binary detection ("does this 64×64 patch contain avalanche debris?"). Established that D4-equivariant CNNs match or exceed standard CNNs and vision transformers on SAR change detection at matched parameter count.
 - **Phase 2 (this repo)** — pixel-level segmentation ("which pixels are avalanche debris?"). Extends the same equivariant architecture to dense prediction and introduces instance-level detection F1 as an alternative evaluation metric.
 
-The model is evaluated on the [AvalCD](https://doi.org/10.5281/zenodo.14888417) benchmark ([Gatti et al. 2026](https://github.com/mattiagatti/avalanche-deep-change-detection)), which provides bi-temporal SAR scenes with polygon annotations of avalanche debris deposits labeled by EAWS D-scale. The Tromsø scene serves as the out-of-distribution test set.
+The model is evaluated on the [AvalCD](https://doi.org/10.5281/zenodo.14888417) benchmark ([Gatti et al. 2026](https://github.com/mattiagatti/avalanche-deep-change-detection)), which provides bi-temporal SAR scenes with polygon annotations of avalanche debris deposits labeled by EAWS D-scale. The Tromso scene serves as the out-of-distribution test set.
 
-**Why we retrained Gatti's model.** Gatti et al. report pixel F1 = 0.806 for their Swin-UNet but did not release model weights or evaluate instance-level metrics. To produce a fair instance-level comparison — same evaluation code, same test scene, same metrics — we retrained their Swin-UNet (2.39M params, unimodal SAR-only) from their published hyperparameters and [code](https://github.com/mattiagatti/avalanche-deep-change-detection). The retrained model achieves pixel F1 = 0.795 on Tromsø, within 1.1 pp of their reported number. All instance-level metrics in this README come from this retrained model, clearly labeled. Gatti's published pixel-level numbers are preserved as-is wherever they appear.
+**Why we retrained Gatti's model.** Gatti et al. report pixel F1 = 0.806 for their Swin-UNet but did not release model weights or evaluate instance-level metrics. To produce a fair instance-level comparison — same evaluation code, same test scene, same metrics — we retrained their Swin-UNet (2.39M params, unimodal SAR-only) from their published hyperparameters and [code](https://github.com/mattiagatti/avalanche-deep-change-detection). The retrained model achieves pixel F1 = 0.795 on Tromso, within 1.1 pp of their reported number. All instance-level metrics in this README come from this retrained model, clearly labeled. Gatti's published pixel-level numbers are preserved as-is wherever they appear.
 
 ## The problem with pixel F1
 
@@ -20,7 +20,7 @@ Pixel F1 treats every pixel independently. Two models with the same pixel F1 are
 
 ![Metric disagreement](figures/metric_disagreement.png)
 
-Our D4-equivariant CNN and Gatti et al.'s Swin-UNet achieve nearly identical pixel F1 (0.794 vs 0.796) on the Tromsø OOD test set. But on instance-level detection F1 at IoU > 0.3, our model leads by **10.7 percentage points** overall and **13 pp on D3 avalanches** (the operationally most relevant scale, n=72). This gap is robust across IoU thresholds (0.1–0.5) and under center-point matching as an alternative to IoU matching.
+Our D4-equivariant CNN and Gatti et al.'s Swin-UNet achieve nearly identical pixel F1 (0.794 vs 0.795) on the Tromso OOD test set. But on instance-level detection F1 at IoU > 0.3, our model leads by **10.7 percentage points** overall and **13 pp on D3 avalanches** (the operationally most relevant scale, n=72). This gap is robust across IoU thresholds (0.1–0.5) and under center-point matching as an alternative to IoU matching.
 
 Pixel F1 isn't enough on its own for this problem. The operational question is "which avalanches were found," not "which pixels were correctly labeled."
 
@@ -28,7 +28,7 @@ Pixel F1 isn't enough on its own for this problem. The operational question is "
 
 ### Pixel-level comparison
 
-Gatti's numbers are from their published paper. For the instance-level comparison below, we retrained their Swin-UNet from their published hyperparameters (weights not released); the retrain achieves pixel F1 = 0.795 on Tromsø, within 1.1 pp of their reported 0.806. Both Gatti columns are shown for transparency.
+Gatti's numbers are from their published paper. For the instance-level comparison below, we retrained their Swin-UNet from their published hyperparameters (weights not released); the retrain achieves pixel F1 = 0.795 on Tromso, within 1.1 pp of their reported 0.806. Both Gatti columns are shown for transparency.
 
 | Metric | D4-EquiCNN (ours) | Swin-UNet (Gatti, published) | Swin-UNet (our retrain) |
 |---|---|---|---|
@@ -38,7 +38,7 @@ Gatti's numbers are from their published paper. For the instance-level compariso
 | F2 (pixel, F2-opt) | **0.821** | 0.799 | 0.834 |
 | Parameters | **0.63M** | 2.39M | 2.39M |
 
-Our model has higher recall and F2 than the Swin-UNet. The F1 gap vs Gatti's published number comes from precision (boundary sharpness), consistent with the capacity difference. The gap shrinks to 0.1 pp against our retrain.
+Our model has higher recall and F2 than the Swin-UNet. The F1 gap vs Gatti's published number (0.806) comes from precision (boundary sharpness), consistent with the capacity difference. Against our retrain (0.795), the models are effectively tied on pixel F1.
 
 ### Gatti et al. Table 5 — updated with our model
 
@@ -94,10 +94,10 @@ Our model's TP median probability is 0.631 (61% of TP pixels above 0.5) while TN
 
 ### D2 detection is bimodal — driven by environment, not size
 
-The 25 D2 deposits in the Tromsø test set show a bimodal detection pattern: 15 produce non-trivial probability mass within the GT footprint, 7 are clearly missed. **Deposit size does not predict detection success.** Note: "detected" here means the model assigns meaningful probability to the deposit region; it does not imply IoU > 0.3 instance matching, which is a stricter criterion (D2 instance F1 is 0.11 for both models).
+The 25 D2 deposits in the Tromso test set show a bimodal detection pattern: 15 produce non-trivial probability mass within the GT footprint, 7 are clearly missed. **Deposit size does not predict detection success.** Note: "detected" here means the model assigns meaningful probability to the deposit region; it does not imply IoU > 0.3 instance matching, which is a stricter criterion (D2 instance F1 is 0.11 for both models).
 
 ![D2 detection grid](figures/d2_grid.png)
-*All 25 Tromsø D2 polygons sorted by area. The bimodal pattern is visible: some deposits produce bright, confident predictions while others are invisible regardless of size.*
+*All 25 Tromso D2 polygons sorted by area. The bimodal pattern is visible: some deposits produce bright, confident predictions while others are invisible regardless of size.*
 
 ## Experiments beyond the baseline
 
@@ -129,7 +129,7 @@ The instance-level advantage our model shows is architectural — it cannot be r
 
 **D4-equivariant bi-temporal segmentation network** built on [escnn](https://github.com/QUVA-Lab/escnn).
 
-- **Encoder**: 5-block shared-weight backbone equivariant to the dihedral group D4 (rotations by 90 degrees and reflections). Each block: `R2Conv(3x3) -> InnerBatchNorm -> ELU -> [MaxPool]`. Regular representations with channel counts `[8, 16, 32, 32, 32]`.
+- **Encoder**: 5-block shared-weight backbone equivariant to the dihedral group D4 (rotations by 90 degrees and reflections). Each block: `R2Conv(3x3) -> InnerBatchNorm -> ELU -> [PointwiseAvgPool2D]`. Regular representations with channel counts `[8, 16, 32, 32, 32]`.
 - **Change features**: Equivariant difference (`post - pre`) at all 5 scales, followed by GroupPooling to invariant representations. Spatial change evidence at each decoder stage.
 - **Decoder**: 4-stage decoder (standard Conv2d). The best configuration (condition 1) does NOT use skip connections from encoder to decoder — the bottleneck change features alone are sufficient. This is a no-skip decoder, not a standard U-Net decoder. 4 engineered channels (log-ratio VH/VV, cross-pol post/pre) are injected at each decoder scale via adaptive pooling.
 - **Output**: 1-channel logit map → sigmoid → binary prediction at optimized threshold (0.225).
@@ -179,7 +179,7 @@ python -m src.train \
     --no-wandb
 ```
 
-Best configuration (condition 1): BCE loss, no biased sampler, no augmentation, no decoder skip connections. The model learns the optimal representation in ~37 epochs with early stopping on validation F1.
+Best configuration (condition 1): BCE loss, no biased sampler, no augmentation, no decoder skip connections. The model learns the optimal representation in ~37 epochs with early stopping on validation F1 (patience=20 after warmup).
 
 ## Inference
 
@@ -226,16 +226,21 @@ src/
     augment.py        Copy-paste augmentation
     augment_online.py Online geometric + radiometric augmentation
   slurm/              SLURM job scripts for Hyak cluster
-wiki/                 Project knowledge base
-figures/              Result visualizations
-results_final/        Locked evaluation outputs (probability maps, metrics)
+scripts/              Data acquisition and diagnostic utilities
+wiki/                 Internal project notes and decision log (working documents)
+figures/              Result visualizations (all figures in README)
+results_final/        Locked evaluation outputs (probability maps, GT masks)
+results_gatti_mirror_full/  Gatti-mirror experiment eval JSONs
 ```
 
 ## Requirements
 
-- PyTorch >= 2.0
-- [escnn](https://github.com/QUVA-Lab/escnn) (E(2)-equivariant steerable CNNs)
-- rasterio, scipy, numpy, shapely
+- Python 3.12
+- PyTorch >= 2.6 (CUDA 12.4 on Hyak; CPU/MPS locally)
+- [escnn](https://github.com/QUVA-Lab/escnn) >= 0.1.9 (E(2)-equivariant steerable CNNs)
+- rasterio >= 1.3, scipy, numpy, shapely >= 2.0
+
+Full dependency list with version pins in `requirements.txt`. On Hyak, PyTorch and numpy are provided by the container (`pytorch_24.12-py3.sif`).
 
 ## References
 

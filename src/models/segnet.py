@@ -149,10 +149,6 @@ class D4SegNet(nn.Module):
         self.enc4 = _eq_block(reg_types[2], reg_types[3], pool=True)  #  8× 8
         self.enc5 = _eq_block(reg_types[3], reg_types[4], pool=True)  #  4× 4
 
-        self.group_pool = [
-            enn.GroupPooling(reg_types[i]) for i in range(5)
-        ]
-        # Register as module list so parameters are tracked
         self.gp1 = enn.GroupPooling(reg_types[0])
         self.gp2 = enn.GroupPooling(reg_types[1])
         self.gp3 = enn.GroupPooling(reg_types[2])

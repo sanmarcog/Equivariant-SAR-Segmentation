@@ -14,3 +14,6 @@ build/
 .ipynb_checkpoints/
 wandb/
 results/
+.claude/
+.vscode/
+.idea/
