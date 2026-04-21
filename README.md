@@ -65,7 +65,14 @@ A predicted connected component matches a GT polygon if their IoU exceeds the th
 
 ### Calibration asymmetry
 
-Both models achieve ~0.79 pixel F1 but with very different probability calibration. Our model's optimal threshold is 0.225; the Swin-UNet's is 0.775. Probability histogram analysis shows our model's TP median probability is 0.631 (61% of TP pixels above 0.5) while TN median is 0.081 — the model IS confident on true positives, but the extreme class imbalance (0.5% positive pixels) forces the operating threshold low. Post-hoc isotonic regression reduces ECE from 0.077 to 0.004 without changing F1 at optimal threshold.
+Both models achieve ~0.79 pixel F1 but with very different probability calibration. Our model's optimal threshold is 0.225; the Swin-UNet's is 0.775.
+
+![Calibration histograms](figures/calibration_histograms.png)
+
+Our model's TP median probability is 0.631 (61% of TP pixels above 0.5) while TN median is 0.081 — the model IS confident on true positives, but the extreme class imbalance (0.5% positive pixels) forces the operating threshold low. The Swin-UNet produces sharper, more saturated outputs concentrated near 0 and 1. Post-hoc isotonic regression reduces our ECE from 0.077 to 0.004 without changing F1 at optimal threshold.
+
+![Threshold curves](figures/threshold_curves.png)
+*Both models peak at ~0.79 F1 but at opposite ends of the threshold range. Same accuracy, completely different confidence profiles.*
 
 ## Experiments beyond the baseline
 
@@ -89,6 +96,11 @@ We explored an architectural decomposition: use the Phase 1 detector to propose 
 - Full-tile conditioning (adding Phase 1's heatmap as extra input to Phase 2 on 30K patches) achieved F1=0.773 — Phase 1's output is partially redundant with Phase 2's internal features
 
 These negative results confirmed that the instance-level advantage is architectural, not recoverable through loss engineering or pipeline changes. The appropriate response was to measure it properly (instance-level F1) rather than try to force it into a pixel-level metric.
+
+### Failure modes
+
+![Failure modes](figures/failure_modes.png)
+*Top row: our model. Bottom row: Swin-UNet on the same regions. Left: both miss small D2 deposits. Center: our model spills probability beyond GT boundaries. Right: our model produces a false positive on non-avalanche terrain.*
 
 ## Prediction visualizations
 
