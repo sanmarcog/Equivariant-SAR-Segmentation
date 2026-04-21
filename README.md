@@ -14,6 +14,12 @@ The model is evaluated on the [AvalCD](https://doi.org/10.5281/zenodo.14888417) 
 
 **Why we retrained Gatti's model.** Gatti et al. report pixel F1 = 0.806 for their Swin-UNet but did not release model weights or evaluate instance-level metrics. To produce a fair instance-level comparison — same evaluation code, same test scene, same metrics — we retrained their Swin-UNet (2.39M params, unimodal SAR-only) from their published hyperparameters and [code](https://github.com/mattiagatti/avalanche-deep-change-detection). The retrained model achieves pixel F1 = 0.795 on Tromso, within 1.1 pp of their reported number. All instance-level metrics in this README come from this retrained model, clearly labeled. Gatti's published pixel-level numbers are preserved as-is wherever they appear.
 
+## Mathematical background
+
+The model's encoder is equivariant to the **dihedral group D4** — the 8-element symmetry group of the square (four 90° rotations × two reflections). For a detailed treatment of why this symmetry is appropriate for SAR imagery and how regular representations lift the group action into channel space, see the [Phase 1 README](https://github.com/sanmarcog/Equivariant-CNN-SAR#mathematical-background).
+
+In brief: an equivariant network satisfies f(ρ_g · x) = ρ_g · f(x) for all group elements g ∈ D4, meaning the model's response to a rotated/reflected input is exactly the rotated/reflected response to the original. For bi-temporal change detection, the equivariant difference (post − pre) followed by GroupPooling produces an **invariant** change map — the output is the same regardless of the scene's orientation. This eliminates 4 of 6 standard geometric augmentations by construction.
+
 ## The problem with pixel F1
 
 Pixel F1 treats every pixel independently. Two models with the same pixel F1 are considered equivalent. But when we evaluate on **instance-level detection** — "which avalanches did the model find?" — the ranking changes.
@@ -90,7 +96,7 @@ Our model's TP median probability is 0.631 (61% of TP pixels above 0.5) while TN
 ## Prediction visualizations
 
 ![Large-scale prediction overlay](figures/pair16_overlay.png)
-*Model probability map on a region with mixed D-scales. High-confidence predictions (yellow) on the D3 deposit (cyan boundary); lower, more diffuse probability on the adjacent D2 deposit (red boundary).*
+*Model probability map on a region with mixed D-scales. The D3 deposit (cyan boundary) receives high-confidence predictions; the adjacent D2 deposit (red boundary) receives lower, more diffuse probability.*
 
 ### D2 detection is bimodal — driven by environment, not size
 
@@ -232,6 +238,15 @@ figures/              Result visualizations (all figures in README)
 results_final/        Locked evaluation outputs (probability maps, GT masks)
 results_gatti_mirror_full/  Gatti-mirror experiment eval JSONs
 ```
+
+## Limitations
+
+- **Single test scene.** All results are from the Tromso OOD scene (n=117 polygons). Cross-scene generalization is not evaluated.
+- **Single comparison baseline.** Instance-level metrics are computed against one Swin-UNet retrain. No confidence interval on retrain variance.
+- **No seed-level variance** for the headline pixel F1 number. The ablation table (conditions 1-5) ran 3 seeds each; the headline result is seed 1 only.
+- **D2 physics claim is speculative.** "D2 detection floor set by SAR physics" is inferred from the bimodal pattern on n=25 deposits. No per-deposit viewing-geometry analysis was performed.
+- **Boundary precision claim is indirect.** "The F1 gap comes from precision (boundary sharpness)" is inferred from lower precision than recall. Other explanations (probability leakage, calibration asymmetry) are plausible and partially supported by the calibration analysis.
+- **No runtime/memory comparison** between our model and the Swin-UNet.
 
 ## Requirements
 

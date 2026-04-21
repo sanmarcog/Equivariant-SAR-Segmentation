@@ -1,5 +1,11 @@
 # Gatti-Mirror Results: D4-EquiCNN vs Swin-UNet
 
+> **Note:** This page documents the **Gatti-mirror experiment** — one specific
+> ablation where we trained our model using Gatti's exact recipe (128×128 patches,
+> BCE pw=3.0, biased sampler). This is NOT the final model. The final model
+> (condition 1, 64×64 patches, BCE pw=1.0, no sampler) achieves F1 = 0.794 —
+> see the [main README](../README.md) for headline numbers.
+
 > **Gatti-mirror protocol**: identical training recipe (patch 128×128, stride 64,
 > BCE pos_weight=3.0, balanced sampler, 110 epochs, AdamW LR=1e-4,
 > 10-epoch warmup + cosine, morph closing, no TTA). Only difference: architecture.
