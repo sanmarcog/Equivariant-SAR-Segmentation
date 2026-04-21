@@ -140,7 +140,7 @@ The instance-level advantage our model shows is architectural — it cannot be r
 - **Decoder**: 4-stage decoder (standard Conv2d). The best configuration (condition 1) does NOT use skip connections from encoder to decoder — the bottleneck change features alone are sufficient. This is a no-skip decoder, not a standard U-Net decoder. 4 engineered channels (log-ratio VH/VV, cross-pol post/pre) are injected at each decoder scale via adaptive pooling.
 - **Output**: 1-channel logit map → sigmoid → binary prediction at optimized threshold (0.225).
 
-D4 equivariance makes the model exactly invariant to horizontal flips, vertical flips, and 90/180/270 degree rotations. This eliminates 4 of 6 standard geometric augmentations. We hypothesize the residual +0.6 pp F1 gain from 4-fold TTA comes from boundary effects at tile edges where the receptive field is truncated, though this has not been formally verified.
+The D4-equivariant encoder produces change features that are exactly invariant to horizontal flips, vertical flips, and 90/180/270 degree rotations — verified by unit test (encoder bottleneck diff < 1e-4 under all D4 transforms). The full model is approximately equivariant: the standard Conv2d decoder and extra channel injection introduce small orientation-dependent effects. This eliminates 4 of 6 standard geometric augmentations. The residual +0.6 pp F1 gain from 4-fold TTA is consistent with the decoder's approximate (not exact) equivariance.
 
 **Total parameters**: 625,617
 
