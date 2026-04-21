@@ -1,5 +1,7 @@
 # D4-Equivariant SAR Avalanche Segmentation
 
+![Tests](https://github.com/sanmarcog/Equivariant-SAR-Segmentation/actions/workflows/test.yml/badge.svg)
+
 ![Comparison](figures/hero_comparison.gif)
 *Same pixel F1. Different avalanche detection. Our 625K-parameter equivariant CNN finds more individual deposits than a 2.39M-parameter Swin-UNet — a difference invisible to the standard metric.*
 
