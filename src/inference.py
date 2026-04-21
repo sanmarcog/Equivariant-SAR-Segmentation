@@ -108,7 +108,7 @@ def predict_scene(
     Returns:
         prob_map: [H, W] float32 array with predicted probabilities in [0, 1].
     """
-    assert blending in ("mean", "max", "gaussian"), f"unknown blending={blending}"
+    assert blending in ("mean", "max", "gaussian", "center_crop"), f"unknown blending={blending}"
     scene_dir = Path(scene_dir)
     model.eval()
 
@@ -148,6 +148,11 @@ def predict_scene(
         kernel = kernel.astype(np.float64)
         weighted_logit_sum = np.zeros((H, W), dtype=np.float64)
         weight_sum         = np.zeros((H, W), dtype=np.float64)
+    elif blending == "center_crop":
+        # Take only center region of each tile (stride × stride pixels)
+        cc_margin = (P - stride) // 2
+        prob_map_cc = np.zeros((H, W), dtype=np.float32)
+        written_cc  = np.zeros((H, W), dtype=bool)
 
     arr_t = torch.from_numpy(arr12)
 
@@ -186,6 +191,17 @@ def predict_scene(
             elif blending == "gaussian":
                 weighted_logit_sum[i:i+P, j:j+P] += tile_logit.astype(np.float64) * kernel
                 weight_sum[i:i+P, j:j+P]         += kernel
+            elif blending == "center_crop":
+                tile_prob = 1.0 / (1.0 + np.exp(-tile_logit.astype(np.float32)))
+                cr0, cr1 = cc_margin, P - cc_margin
+                cc0, cc1 = cc_margin, P - cc_margin
+                si, sj = i + cr0, j + cc0
+                eh = min(cr1 - cr0, H - si)
+                ew = min(cc1 - cc0, W - sj)
+                if eh > 0 and ew > 0 and not written_cc[si:si+eh, sj:sj+ew].all():
+                    mask = ~written_cc[si:si+eh, sj:sj+ew]
+                    prob_map_cc[si:si+eh, sj:sj+ew][mask] = tile_prob[cr0:cr0+eh, cc0:cc0+ew][mask]
+                    written_cc[si:si+eh, sj:sj+ew] = True
 
     # ── Finalize ───────────────────────────────────────────────────────
     if blending == "mean":
@@ -199,6 +215,8 @@ def predict_scene(
         weight_sum = np.maximum(weight_sum, 1e-10)
         avg_logit  = weighted_logit_sum / weight_sum
         prob_map   = 1.0 / (1.0 + np.exp(-avg_logit))
+    elif blending == "center_crop":
+        prob_map = prob_map_cc
 
     return prob_map.astype(np.float32)
 
