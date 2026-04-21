@@ -35,7 +35,7 @@ run_config() {
         echo "[$TAG] Checkpoint exists — skipping training"
     else
         echo "=== TRAIN [$TAG] lr=$LR wd=$WD dec_drop=$DEC_DROP aug=$AUG_STR ==="
-        apptainer exec --nv --bind /mmfs1 "$SIF" /bin/bash -c "
+        apptainer exec --nv --bind "${BIND_ROOT:?Set BIND_ROOT}" "$SIF" /bin/bash -c "
             source $REPO/.venv/bin/activate
             cd $REPO
             python -m src.train \
@@ -66,7 +66,7 @@ run_config() {
     EVAL_F1=$EVAL_DIR/eval_gaussian_f1opt.json
     if [[ ! -f "$EVAL_F1" ]]; then
         echo "=== EVAL [$TAG] Gaussian F1-opt ==="
-        apptainer exec --nv --bind /mmfs1 "$SIF" /bin/bash -c "
+        apptainer exec --nv --bind "${BIND_ROOT:?Set BIND_ROOT}" "$SIF" /bin/bash -c "
             source $REPO/.venv/bin/activate
             cd $REPO
             python -m src.evaluate \

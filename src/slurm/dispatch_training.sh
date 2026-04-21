@@ -81,7 +81,7 @@ for CONDITION in 5 4 3 2 1; do   # reversed: get critical (full-system) data poi
         if [[ -f "$CKPT" ]]; then
             echo "Checkpoint exists, skipping training: $CKPT"
         else
-            apptainer exec --nv --bind /mmfs1 "$SIF" /bin/bash -c "
+            apptainer exec --nv --bind "${BIND_ROOT:?Set BIND_ROOT}" "$SIF" /bin/bash -c "
                 source $REPO/.venv/bin/activate
                 cd $REPO
                 python -m src.train \
@@ -118,7 +118,7 @@ for CONDITION in 5 4 3 2 1; do   # reversed: get critical (full-system) data poi
         if [[ -f "$EVAL_OUT" ]]; then
             echo "Eval output exists, skipping: $EVAL_OUT"
         else
-            apptainer exec --nv --bind /mmfs1 "$SIF" /bin/bash -c "
+            apptainer exec --nv --bind "${BIND_ROOT:?Set BIND_ROOT}" "$SIF" /bin/bash -c "
                 source $REPO/.venv/bin/activate
                 cd $REPO
                 python -m src.evaluate \
@@ -157,7 +157,7 @@ echo "============================================================"
 echo "AGGREGATE -> results/ablation_tables.json"
 echo "============================================================"
 
-apptainer exec --bind /mmfs1 "$SIF" /bin/bash -c "
+apptainer exec --bind "${BIND_ROOT:?Set BIND_ROOT}" "$SIF" /bin/bash -c "
     source $REPO/.venv/bin/activate
     cd $REPO
     python -m src.aggregate \

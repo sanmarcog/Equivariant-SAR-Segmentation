@@ -16,10 +16,13 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Install dependencies
+      - name: Install system deps
+        run: sudo apt-get update && sudo apt-get install -y gfortran
+
+      - name: Install Python deps
         run: |
           pip install torch --index-url https://download.pytorch.org/whl/cpu
-          pip install escnn>=0.1.9 scipy numpy pytest
+          pip install "escnn>=0.1.9" scipy numpy pytest
 
       - name: Run tests
         run: pytest tests/ -v

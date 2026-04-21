@@ -24,7 +24,7 @@ run_eval() {
     local EVAL=$EVAL_DIR/eval_s16_tta.json
     if [[ ! -f "$EVAL" ]]; then
         echo "=== EVAL [$TAG] ==="
-        apptainer exec --nv --bind /mmfs1 "$SIF" /bin/bash -c "
+        apptainer exec --nv --bind "${BIND_ROOT:?Set BIND_ROOT}" "$SIF" /bin/bash -c "
             source $REPO/.venv/bin/activate && cd $REPO && \
             python -m src.evaluate \
                 --ckpt $CKPT \
@@ -49,7 +49,7 @@ CKPT=$OUT/best_cond1_seed${SEED}.pt
 mkdir -p "$OUT"
 if [[ ! -f "$CKPT" ]]; then
     echo "=== TRAIN [$TAG] ==="
-    apptainer exec --nv --bind /mmfs1 "$SIF" /bin/bash -c "
+    apptainer exec --nv --bind "${BIND_ROOT:?Set BIND_ROOT}" "$SIF" /bin/bash -c "
         source $REPO/.venv/bin/activate && cd $REPO && \
         python -m src.train $COMMON \
             --out-dir $OUT --loss-mode component_iou --balance-weight 0.5
@@ -64,7 +64,7 @@ CKPT=$OUT/best_cond1_seed${SEED}.pt
 mkdir -p "$OUT"
 if [[ ! -f "$CKPT" ]]; then
     echo "=== TRAIN [$TAG] ==="
-    apptainer exec --nv --bind /mmfs1 "$SIF" /bin/bash -c "
+    apptainer exec --nv --bind "${BIND_ROOT:?Set BIND_ROOT}" "$SIF" /bin/bash -c "
         source $REPO/.venv/bin/activate && cd $REPO && \
         python -m src.train $COMMON \
             --out-dir $OUT --loss-mode component_iou --balance-weight 0.25
@@ -79,7 +79,7 @@ CKPT=$OUT/best_cond1_seed${SEED}.pt
 mkdir -p "$OUT"
 if [[ ! -f "$CKPT" ]]; then
     echo "=== TRAIN [$TAG] ==="
-    apptainer exec --nv --bind /mmfs1 "$SIF" /bin/bash -c "
+    apptainer exec --nv --bind "${BIND_ROOT:?Set BIND_ROOT}" "$SIF" /bin/bash -c "
         source $REPO/.venv/bin/activate && cd $REPO && \
         python -m src.train $COMMON \
             --out-dir $OUT --loss-mode component_iou --balance-weight 2.0
@@ -94,7 +94,7 @@ CKPT=$OUT/best_cond1_seed${SEED}.pt
 mkdir -p "$OUT"
 if [[ ! -f "$CKPT" ]]; then
     echo "=== TRAIN [$TAG] ==="
-    apptainer exec --nv --bind /mmfs1 "$SIF" /bin/bash -c "
+    apptainer exec --nv --bind "${BIND_ROOT:?Set BIND_ROOT}" "$SIF" /bin/bash -c "
         source $REPO/.venv/bin/activate && cd $REPO && \
         python -m src.train $COMMON \
             --out-dir $OUT --loss-mode component_iou_dice --balance-weight 1.0

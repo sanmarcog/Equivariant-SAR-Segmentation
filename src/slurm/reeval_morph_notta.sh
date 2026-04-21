@@ -42,7 +42,7 @@ for COND in 1 2 3 4 5; do
         fi
 
         echo "=== EVAL cond=$COND seed=$SEED ==="
-        apptainer exec --nv --bind /mmfs1 "$SIF" /bin/bash -c "
+        apptainer exec --nv --bind "${BIND_ROOT:?Set BIND_ROOT}" "$SIF" /bin/bash -c "
             source $REPO/.venv/bin/activate
             cd $REPO
             python -m src.evaluate \
@@ -62,7 +62,7 @@ for COND in 1 2 3 4 5; do
 done
 
 echo "=== AGGREGATE ==="
-apptainer exec --bind /mmfs1 "$SIF" /bin/bash -c "
+apptainer exec --bind "${BIND_ROOT:?Set BIND_ROOT}" "$SIF" /bin/bash -c "
     source $REPO/.venv/bin/activate
     cd $REPO
     python -m src.aggregate \

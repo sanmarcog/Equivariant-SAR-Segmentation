@@ -5,7 +5,7 @@
 # Run this ONCE from the login node before submitting training jobs.
 #
 # Usage:
-#   apptainer exec --bind /mmfs1 --nv --bind /mmfs1 ${SIF:?Set SIF to container path} \
+#   apptainer exec --bind "${BIND_ROOT:?Set BIND_ROOT}" --nv --bind "${BIND_ROOT:?Set BIND_ROOT}" ${SIF:?Set SIF to container path} \
 #       bash src/slurm/setup_venv.sh
 
 set -euo pipefail

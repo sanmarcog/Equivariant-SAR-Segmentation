@@ -50,7 +50,7 @@ for CONDITION in 5 4; do
         if [[ -f "$CKPT" ]]; then
             echo "checkpoint exists, skipping training: $CKPT"
         else
-            apptainer exec --nv --bind /mmfs1 "$SIF" /bin/bash -c "
+            apptainer exec --nv --bind "${BIND_ROOT:?Set BIND_ROOT}" "$SIF" /bin/bash -c "
                 source $REPO/.venv/bin/activate
                 cd $REPO
                 python -m src.train \
@@ -78,7 +78,7 @@ for CONDITION in 5 4; do
         if [[ -f "$EVAL_OUT" ]]; then
             echo "eval exists, skipping: $EVAL_OUT"
         else
-            apptainer exec --nv --bind /mmfs1 "$SIF" /bin/bash -c "
+            apptainer exec --nv --bind "${BIND_ROOT:?Set BIND_ROOT}" "$SIF" /bin/bash -c "
                 source $REPO/.venv/bin/activate
                 cd $REPO
                 python -m src.evaluate \
@@ -97,7 +97,7 @@ for CONDITION in 5 4; do
 done
 
 echo "=== AGGREGATE (aug) ==="
-apptainer exec --bind /mmfs1 "$SIF" /bin/bash -c "
+apptainer exec --bind "${BIND_ROOT:?Set BIND_ROOT}" "$SIF" /bin/bash -c "
     source $REPO/.venv/bin/activate
     cd $REPO
     python -m src.aggregate \

@@ -30,7 +30,7 @@ run_eval() {
     local EVAL_F1=$EVAL_DIR/eval_s16_tta.json
     if [[ ! -f "$EVAL_F1" ]]; then
         echo "=== EVAL [$TAG] stride16+TTA ==="
-        apptainer exec --nv --bind /mmfs1 "$SIF" /bin/bash -c "
+        apptainer exec --nv --bind "${BIND_ROOT:?Set BIND_ROOT}" "$SIF" /bin/bash -c "
             source $REPO/.venv/bin/activate && cd $REPO && \
             python -m src.evaluate \
                 --ckpt $CKPT --data-dir $DATA_DIR --stats $STATS \
@@ -53,7 +53,7 @@ CKPT=$OUT/best_cond2_seed${SEED}.pt
 mkdir -p "$OUT"
 if [[ ! -f "$CKPT" ]]; then
     echo "=== TRAIN [$TAG] ==="
-    apptainer exec --nv --bind /mmfs1 "$SIF" /bin/bash -c "
+    apptainer exec --nv --bind "${BIND_ROOT:?Set BIND_ROOT}" "$SIF" /bin/bash -c "
         source $REPO/.venv/bin/activate && cd $REPO && \
         python -m src.train $COMMON \
             --out-dir $OUT --condition 2 --pos-weight 1.0
@@ -68,7 +68,7 @@ CKPT=$OUT/best_cond2_seed${SEED}.pt
 mkdir -p "$OUT"
 if [[ ! -f "$CKPT" ]]; then
     echo "=== TRAIN [$TAG] ==="
-    apptainer exec --nv --bind /mmfs1 "$SIF" /bin/bash -c "
+    apptainer exec --nv --bind "${BIND_ROOT:?Set BIND_ROOT}" "$SIF" /bin/bash -c "
         source $REPO/.venv/bin/activate && cd $REPO && \
         python -m src.train $COMMON \
             --out-dir $OUT --condition 2 --loss-mode dice --pos-weight 1.0
@@ -83,7 +83,7 @@ CKPT=$OUT/best_cond2_seed${SEED}.pt
 mkdir -p "$OUT"
 if [[ ! -f "$CKPT" ]]; then
     echo "=== TRAIN [$TAG] ==="
-    apptainer exec --nv --bind /mmfs1 "$SIF" /bin/bash -c "
+    apptainer exec --nv --bind "${BIND_ROOT:?Set BIND_ROOT}" "$SIF" /bin/bash -c "
         source $REPO/.venv/bin/activate && cd $REPO && \
         python -m src.train $COMMON \
             --out-dir $OUT --condition 2 --loss-mode bce_dice --pos-weight 1.0

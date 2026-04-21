@@ -62,5 +62,5 @@ echo "[3/3] sequential job submitted → job $SEQ_JOB ${GRID_DEP:+(after $GRID_J
 
 echo ""
 echo "Full pipeline queued. Monitor with:"
-echo "  squeue -u sanmarco"
+echo "  squeue -u "$USER""
 echo "  tail -f $REPO/logs/seq_${SEQ_JOB}.out"

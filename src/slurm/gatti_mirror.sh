@@ -42,7 +42,7 @@ if [[ -f "$CKPT" ]]; then
     echo "Checkpoint exists ($CKPT) — skipping training"
 else
     echo "=== TRAIN (Gatti-mirror, seed=$SEED) ==="
-    apptainer exec --nv --bind /mmfs1 "$SIF" /bin/bash -c "
+    apptainer exec --nv --bind "${BIND_ROOT:?Set BIND_ROOT}" "$SIF" /bin/bash -c "
         source $REPO/.venv/bin/activate
         cd $REPO
         python -m src.train \
@@ -71,7 +71,7 @@ fi
 EVAL_F1=$EVAL_DIR/eval_seed${SEED}_gaussian_f1opt.json
 if [[ ! -f "$EVAL_F1" ]]; then
     echo "=== EVAL F1-opt (Gaussian blending) ==="
-    apptainer exec --nv --bind /mmfs1 "$SIF" /bin/bash -c "
+    apptainer exec --nv --bind "${BIND_ROOT:?Set BIND_ROOT}" "$SIF" /bin/bash -c "
         source $REPO/.venv/bin/activate
         cd $REPO
         python -m src.evaluate \
@@ -96,7 +96,7 @@ fi
 EVAL_F2=$EVAL_DIR/eval_seed${SEED}_max_f2opt.json
 if [[ ! -f "$EVAL_F2" ]]; then
     echo "=== EVAL F2-opt (Max blending) ==="
-    apptainer exec --nv --bind /mmfs1 "$SIF" /bin/bash -c "
+    apptainer exec --nv --bind "${BIND_ROOT:?Set BIND_ROOT}" "$SIF" /bin/bash -c "
         source $REPO/.venv/bin/activate
         cd $REPO
         python -m src.evaluate \
