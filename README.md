@@ -1,9 +1,18 @@
 # D4-Equivariant SAR Avalanche Segmentation
 
-Pixel-level avalanche debris mapping from bi-temporal Sentinel-1 SAR imagery using a D4-equivariant CNN. Phase 2 of a two-phase project — Phase 1 established patch-level detection; this phase extends to pixel-level segmentation and proposes instance-level detection F1 as an alternative evaluation metric.
-
 ![Comparison](figures/hero_comparison.gif)
 *Same pixel F1. Different avalanche detection. Our 625K-parameter equivariant CNN finds more individual deposits than a 2.39M-parameter Swin-UNet — a difference invisible to the standard metric.*
+
+## Overview
+
+This project builds a pixel-level avalanche debris segmentation model from bi-temporal Sentinel-1 SAR imagery using a D4-equivariant CNN. It is **Phase 2** of a two-phase project:
+
+- **[Phase 1](https://github.com/sanmarcog/Equivariant-CNN-SAR)** — patch-level binary detection ("does this 64×64 patch contain avalanche debris?"). Established that D4-equivariant CNNs match or exceed standard CNNs and vision transformers on SAR change detection at matched parameter count.
+- **Phase 2 (this repo)** — pixel-level segmentation ("which pixels are avalanche debris?"). Extends the same equivariant architecture to dense prediction and introduces instance-level detection F1 as an alternative evaluation metric.
+
+The model is evaluated on the [AvalCD](https://doi.org/10.5281/zenodo.14888417) benchmark ([Gatti et al. 2026](https://github.com/mattiagatti/avalanche-deep-change-detection)), which provides bi-temporal SAR scenes with polygon annotations of avalanche debris deposits labeled by EAWS D-scale. The Tromsø scene serves as the out-of-distribution test set.
+
+**Why we retrained Gatti's model.** Gatti et al. report pixel F1 = 0.806 for their Swin-UNet but did not release model weights or evaluate instance-level metrics. To produce a fair instance-level comparison — same evaluation code, same test scene, same metrics — we retrained their Swin-UNet (2.39M params, unimodal SAR-only) from their published hyperparameters and [code](https://github.com/mattiagatti/avalanche-deep-change-detection). The retrained model achieves pixel F1 = 0.795 on Tromsø, within 1.1 pp of their reported number. All instance-level metrics in this README come from this retrained model, clearly labeled. Gatti's published pixel-level numbers are preserved as-is wherever they appear.
 
 ## The problem with pixel F1
 
