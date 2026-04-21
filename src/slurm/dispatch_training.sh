@@ -8,8 +8,8 @@
 #SBATCH --mem=64G
 #SBATCH --gres=gpu:1
 #SBATCH --time=48:00:00
-#SBATCH --output=/mmfs1/gscratch/scrubbed/sanmarco/equivariant-sar-seg/logs/seq_%j.out
-#SBATCH --error=/mmfs1/gscratch/scrubbed/sanmarco/equivariant-sar-seg/logs/seq_%j.err
+#SBATCH --output=logs/%x_%j.out
+#SBATCH --error=logs/%x_%j.err
 #
 # Sequential pipeline: reads grid_results.json, then runs all 15 training
 # runs and all 15 eval runs back-to-back in a single job, then aggregates.
@@ -24,12 +24,12 @@
 # aggregate runs over whatever results made it.
 set -uo pipefail
 
-REPO=/mmfs1/gscratch/scrubbed/sanmarco/equivariant-sar-seg
+REPO=${REPO:?Set REPO to repo root}
 FAIL_COUNT=0
 declare -a FAILURES
-DATA_DIR=/mmfs1/gscratch/scrubbed/sanmarco/equivariant-sar/data/raw
+DATA_DIR=${DATA_DIR:?Set DATA_DIR}
 STATS=$REPO/data/norm_stats_12ch.json
-SIF=/mmfs1/gscratch/scrubbed/sanmarco/pytorch_24.12-py3.sif
+SIF=${SIF:?Set SIF to container path}
 GRID_RESULTS=$REPO/checkpoints/grid/cond5/grid_results.json
 
 mkdir -p "$REPO/logs" "$REPO/results"

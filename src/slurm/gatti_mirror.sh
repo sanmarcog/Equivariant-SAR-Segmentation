@@ -9,8 +9,8 @@
 #SBATCH --gres=gpu:1
 #SBATCH --time=12:00:00
 #SBATCH --exclude=z3005,z3006
-#SBATCH --output=/mmfs1/gscratch/scrubbed/sanmarco/equivariant-sar-seg/logs/gatti_mirror_%j.out
-#SBATCH --error=/mmfs1/gscratch/scrubbed/sanmarco/equivariant-sar-seg/logs/gatti_mirror_%j.err
+#SBATCH --output=logs/%x_%j.out
+#SBATCH --error=logs/%x_%j.err
 #
 # Gatti-mirror experiment: match every Gatti training/inference detail, swap only the architecture.
 #   - Patch 128×128, stride 64 (50% overlap) for training AND inference
@@ -26,10 +26,10 @@
 # Our one deviation: architecture = D4-equivariant CNN (625K params) instead of SwinV2-Tiny (2.39M).
 
 set -uo pipefail
-REPO=/mmfs1/gscratch/scrubbed/sanmarco/equivariant-sar-seg
-DATA_DIR=/mmfs1/gscratch/scrubbed/sanmarco/equivariant-sar/data/raw
+REPO=${REPO:?Set REPO to repo root}
+DATA_DIR=${DATA_DIR:?Set DATA_DIR}
 STATS=$REPO/data/norm_stats_12ch.json
-SIF=/mmfs1/gscratch/scrubbed/sanmarco/pytorch_24.12-py3.sif
+SIF=${SIF:?Set SIF to container path}
 SEED=${SEED:-0}
 OUT_DIR=$REPO/checkpoints_gatti_mirror_full
 EVAL_DIR=$REPO/results_gatti_mirror_full

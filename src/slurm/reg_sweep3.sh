@@ -9,17 +9,17 @@
 #SBATCH --gres=gpu:1
 #SBATCH --time=12:00:00
 #SBATCH --exclude=z3005,z3006
-#SBATCH --output=/mmfs1/gscratch/scrubbed/sanmarco/equivariant-sar-seg/logs/reg_sweep3_%j.out
-#SBATCH --error=/mmfs1/gscratch/scrubbed/sanmarco/equivariant-sar-seg/logs/reg_sweep3_%j.err
+#SBATCH --output=logs/%x_%j.out
+#SBATCH --error=logs/%x_%j.err
 #
 # Sweep 3: bigger model, better loss, warm restarts.
 # Best so far: aug3x → test F1=0.757 (baseline 0.749, Gatti 0.806).
 
 set -uo pipefail
-REPO=/mmfs1/gscratch/scrubbed/sanmarco/equivariant-sar-seg
-DATA_DIR=/mmfs1/gscratch/scrubbed/sanmarco/equivariant-sar/data/raw
+REPO=${REPO:?Set REPO to repo root}
+DATA_DIR=${DATA_DIR:?Set DATA_DIR}
 STATS=$REPO/data/norm_stats_12ch.json
-SIF=/mmfs1/gscratch/scrubbed/sanmarco/pytorch_24.12-py3.sif
+SIF=${SIF:?Set SIF to container path}
 SEED=0
 
 run_eval() {

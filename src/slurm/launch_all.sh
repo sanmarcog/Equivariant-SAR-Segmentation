@@ -21,7 +21,7 @@
 
 set -euo pipefail
 
-REPO=/mmfs1/gscratch/scrubbed/sanmarco/equivariant-sar-seg
+REPO=${REPO:?Set REPO to repo root}
 SKIP_NORM=${SKIP_NORM:-0}
 SKIP_GRID=${SKIP_GRID:-0}
 

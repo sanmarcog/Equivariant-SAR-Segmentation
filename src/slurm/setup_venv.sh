@@ -5,12 +5,12 @@
 # Run this ONCE from the login node before submitting training jobs.
 #
 # Usage:
-#   apptainer exec --bind /mmfs1 --nv --bind /mmfs1 /mmfs1/gscratch/scrubbed/sanmarco/pytorch_24.12-py3.sif \
+#   apptainer exec --bind /mmfs1 --nv --bind /mmfs1 ${SIF:?Set SIF to container path} \
 #       bash src/slurm/setup_venv.sh
 
 set -euo pipefail
 
-REPO=/mmfs1/gscratch/scrubbed/sanmarco/equivariant-sar-seg
+REPO=${REPO:?Set REPO to repo root}
 VENV=$REPO/.venv
 
 echo "Creating venv at $VENV ..."

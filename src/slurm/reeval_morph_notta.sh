@@ -8,8 +8,8 @@
 #SBATCH --mem=64G
 #SBATCH --gres=gpu:1
 #SBATCH --time=12:00:00
-#SBATCH --output=/mmfs1/gscratch/scrubbed/sanmarco/equivariant-sar-seg/logs/reeval_%j.out
-#SBATCH --error=/mmfs1/gscratch/scrubbed/sanmarco/equivariant-sar-seg/logs/reeval_%j.err
+#SBATCH --output=logs/%x_%j.out
+#SBATCH --error=logs/%x_%j.err
 #
 # Re-evaluate all 15 sar-seq checkpoints with --morph-closing --no-tta.
 # Writes results into a parallel results_v2/ dir so the original ablation
@@ -19,10 +19,10 @@
 
 set -uo pipefail
 
-REPO=/mmfs1/gscratch/scrubbed/sanmarco/equivariant-sar-seg
-DATA_DIR=/mmfs1/gscratch/scrubbed/sanmarco/equivariant-sar/data/raw
+REPO=${REPO:?Set REPO to repo root}
+DATA_DIR=${DATA_DIR:?Set DATA_DIR}
 STATS=$REPO/data/norm_stats_12ch.json
-SIF=/mmfs1/gscratch/scrubbed/sanmarco/pytorch_24.12-py3.sif
+SIF=${SIF:?Set SIF to container path}
 OUT_DIR=${OUT_DIR:-$REPO/results_v2}
 
 mkdir -p "$OUT_DIR"

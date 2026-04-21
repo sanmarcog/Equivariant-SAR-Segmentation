@@ -8,8 +8,8 @@
 #SBATCH --mem=64G
 #SBATCH --gres=gpu:1
 #SBATCH --time=24:00:00
-#SBATCH --output=/mmfs1/gscratch/scrubbed/sanmarco/equivariant-sar-seg/logs/aug_%j.out
-#SBATCH --error=/mmfs1/gscratch/scrubbed/sanmarco/equivariant-sar-seg/logs/aug_%j.err
+#SBATCH --output=logs/%x_%j.out
+#SBATCH --error=logs/%x_%j.err
 #
 # Augmentation experiment: train cond 4 + 5 with --online-aug, 3 seeds each.
 # Picks the same hparams as the main ablation. Eval with --morph-closing --no-tta.
@@ -17,14 +17,14 @@
 #
 # REQUIRES: aug-equivariant branch must be merged or files synced to Hyak.
 # Check before running:
-#   ssh klone "grep -q OnlineAugment /mmfs1/gscratch/scrubbed/sanmarco/equivariant-sar-seg/src/train.py && echo OK || echo NEEDS_AUG_BRANCH"
+#   ssh klone "grep -q OnlineAugment ${REPO:?Set REPO to repo root}/src/train.py && echo OK || echo NEEDS_AUG_BRANCH"
 
 set -uo pipefail
 
-REPO=/mmfs1/gscratch/scrubbed/sanmarco/equivariant-sar-seg
-DATA_DIR=/mmfs1/gscratch/scrubbed/sanmarco/equivariant-sar/data/raw
+REPO=${REPO:?Set REPO to repo root}
+DATA_DIR=${DATA_DIR:?Set DATA_DIR}
 STATS=$REPO/data/norm_stats_12ch.json
-SIF=/mmfs1/gscratch/scrubbed/sanmarco/pytorch_24.12-py3.sif
+SIF=${SIF:?Set SIF to container path}
 GRID_RESULTS=$REPO/checkpoints/grid/cond5/grid_results.json
 
 # Read winning hparams from grid

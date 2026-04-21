@@ -9,12 +9,12 @@
 #SBATCH --gres=gpu:1
 #SBATCH --time=12:00:00
 #SBATCH --exclude=z3005,z3006
-#SBATCH --output=/mmfs1/gscratch/scrubbed/sanmarco/equivariant-sar-seg/logs/lam_sweep_%j.out
-#SBATCH --error=/mmfs1/gscratch/scrubbed/sanmarco/equivariant-sar-seg/logs/lam_sweep_%j.err
+#SBATCH --output=logs/%x_%j.out
+#SBATCH --error=logs/%x_%j.err
 
 set -uo pipefail
-REPO=/mmfs1/gscratch/scrubbed/sanmarco/equivariant-sar-seg
-SIF=/mmfs1/gscratch/scrubbed/sanmarco/pytorch_24.12-py3.sif
+REPO=${REPO:?Set REPO to repo root}
+SIF=${SIF:?Set SIF to container path}
 SEED=1
 
 run_eval() {
@@ -28,7 +28,7 @@ run_eval() {
             source $REPO/.venv/bin/activate && cd $REPO && \
             python -m src.evaluate \
                 --ckpt $CKPT \
-                --data-dir /mmfs1/gscratch/scrubbed/sanmarco/equivariant-sar/data/raw \
+                --data-dir ${DATA_DIR:?Set DATA_DIR} \
                 --stats $REPO/data/norm_stats_12ch.json \
                 --split test --out $EVAL \
                 --patch-size 64 --stride 16 --blending gaussian \
@@ -40,7 +40,7 @@ run_eval() {
     grep '"best_f1"\|"thr_f1"\|"best_f2"' $EVAL 2>/dev/null | head -3
 }
 
-COMMON="--data-dir /mmfs1/gscratch/scrubbed/sanmarco/equivariant-sar/data/raw --stats $REPO/data/norm_stats_12ch.json --condition 1 --seed $SEED --patch-size 64 --train-stride 32 --epochs 110 --patience 30 --warmup-epochs 10 --batch-size 32 --lr 1e-4 --wd 1e-4 --pos-weight 1.0 --num-workers 8 --no-wandb"
+COMMON="--data-dir ${DATA_DIR:?Set DATA_DIR} --stats $REPO/data/norm_stats_12ch.json --condition 1 --seed $SEED --patch-size 64 --train-stride 32 --epochs 110 --patience 30 --warmup-epochs 10 --batch-size 32 --lr 1e-4 --wd 1e-4 --pos-weight 1.0 --num-workers 8 --no-wandb"
 
 # --- lambda=0.5 (most informative single point) ---
 TAG=lam0.5
