@@ -1,0 +1,8 @@
+# Slim deps for the Streamlit demo app — no torch / escnn.
+# Used by HuggingFace Spaces (or `pip install -r requirements-app.txt`
+# locally followed by `streamlit run app.py`).
+streamlit>=1.30
+numpy>=1.24
+scipy>=1.10
+Pillow>=10.0
+streamlit-image-coordinates>=0.1.9

@@ -1,9 +1,33 @@
+---
+title: D4-Equivariant SAR Avalanche Segmentation
+emoji: 🏔️
+colorFrom: gray
+colorTo: orange
+sdk: streamlit
+sdk_version: "1.39.0"
+app_file: app.py
+pinned: false
+short_description: Interactive demo — D4-equivariant CNN finds avalanche debris in Sentinel-1 SAR
+---
+
 # D4-Equivariant SAR Avalanche Segmentation
 
 ![Tests](https://github.com/sanmarcog/Equivariant-SAR-Segmentation/actions/workflows/test.yml/badge.svg)
 
 ![Comparison](figures/hero_comparison.gif)
 *Same pixel F1. Different avalanche detection. Our 625K-parameter equivariant CNN finds more individual deposits than a 2.39M-parameter Swin-UNet — a difference invisible to the standard metric.*
+
+## Live demo
+
+Interactive demo on HuggingFace Spaces — pick a scene, move the threshold slider, watch precision/recall/F1 update live: **(URL once deployed)**
+
+Run locally:
+```bash
+pip install -r requirements-app.txt
+streamlit run app.py
+```
+
+The demo ships a *research preview* of the model's outputs — pre-computed probability maps for the Tromsø out-of-distribution test scene, with interactive thresholding and post-processing. It deliberately does **not** include live SAR scene fetching from Copernicus / ASF or live model inference on fresh data; both are scoped for a v2.
 
 ## Overview
 
