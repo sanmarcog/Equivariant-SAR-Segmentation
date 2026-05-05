@@ -215,6 +215,8 @@ Best configuration (condition 1): BCE loss, no biased sampler, no augmentation, 
 
 ## Inference
 
+The headline checkpoint (`D4SegNet_cond1_seed1.pt`, 8.5 MB) is published as a [GitHub Release asset on v1.0.0](https://github.com/sanmarcog/Equivariant-SAR-Segmentation/releases/tag/v1.0.0). SHA-256: `eed3560336a50081acc3ff3e09a67d155e2ffd1b6042ed2cf75392f49791d2c4`.
+
 Sliding-window inference with 75% overlap, Gaussian blending, morphological closing, and 4-fold TTA:
 
 ```bash
